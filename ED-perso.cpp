@@ -573,7 +573,7 @@ void ED::JoinAnchorPointsUsingSortedAnchors()
 
         Chain *anchor_chain_root = new Chain();
 
-        if (gradImgPointer[anchorPixelOffset] == EDGE_VERTICAL)
+        if (gradOrientationImgPointer[anchorPixelOffset] == EDGE_VERTICAL)
         {
             process_stack.push(StackNode(anchorPixelOffset, DOWN, anchor_chain_root));
             process_stack.push(StackNode(anchorPixelOffset, UP, anchor_chain_root));
