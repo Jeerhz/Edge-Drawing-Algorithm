@@ -401,28 +401,6 @@ void ED::revertChainEdgePixel(Chain *&chain)
     revertChainEdgePixel(chain->second_childChain);
 }
 
-int ED::pruneToLongestChain(Chain *&chain)
-{
-    if (!chain)
-        return 0;
-
-    int leftLen = chain->first_childChain ? pruneToLongestChain(chain->first_childChain) : 0;
-    int rightLen = chain->second_childChain ? pruneToLongestChain(chain->second_childChain) : 0;
-
-    if (leftLen >= rightLen)
-    {
-        if (chain->second_childChain)
-            chain->second_childChain = nullptr;
-        return chain->pixels.size() + leftLen;
-    }
-    else
-    {
-        if (chain->first_childChain)
-            chain->first_childChain = nullptr;
-        return chain->pixels.size() + rightLen;
-    }
-}
-
 bool ED::areNeighbors(int offset1, int offset2)
 {
     int row_distance = abs(offset1 / image_width - offset2 / image_width);
