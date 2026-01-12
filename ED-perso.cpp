@@ -561,16 +561,17 @@ void ED::JoinAnchorPointsUsingSortedAnchors()
         int total_pixels_in_anchor_chain = 0; // Count total pixels in the anchor chain and its children
 
         Chain *anchor_chain_root = new Chain();
-
+        // We initialize two distinct nodes to start anchor chain exploration in order to avoid duplicate pixels from the start.
+        // This is not done in the original implementation where we set the anchor point two times
         if (gradOrientationImgPointer[anchorPixelOffset] == EDGE_VERTICAL)
         {
             process_stack.push(StackNode(anchorPixelOffset, DOWN, anchor_chain_root));
-            process_stack.push(StackNode(anchorPixelOffset, UP, anchor_chain_root));
+            process_stack.push(StackNode(anchorPixelOffset - image_width, UP, anchor_chain_root));
         }
         else
         {
             process_stack.push(StackNode(anchorPixelOffset, RIGHT, anchor_chain_root));
-            process_stack.push(StackNode(anchorPixelOffset, LEFT, anchor_chain_root));
+            process_stack.push(StackNode(anchorPixelOffset - 1, LEFT, anchor_chain_root));
         }
 
         while (!process_stack.empty())
