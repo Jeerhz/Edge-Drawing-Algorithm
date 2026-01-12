@@ -669,11 +669,6 @@ StackNode ED::getNextChainPixel(StackNode &current_node)
     return StackNode(best_offset, dir, current_node.parent_chain);
 }
 
-bool ED::validateNode(StackNode &node)
-{
-    return (edgeImgPointer[node.offset] != EDGE_PIXEL) && (gradImgPointer[node.offset] >= gradThresh);
-}
-
 void ED::exploreChain(StackNode &current_node, Chain *current_chain, int &total_pixels_in_anchor_chain)
 {
 
@@ -688,7 +683,7 @@ void ED::exploreChain(StackNode &current_node, Chain *current_chain, int &total_
 
         current_node = getNextChainPixel(current_node);
 
-        if (!validateNode(current_node))
+        if (edgeImgPointer[current_node.offset] == EDGE_PIXEL || gradImgPointer[current_node.offset] < gradThresh)
             return;
     }
 

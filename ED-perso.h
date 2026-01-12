@@ -67,7 +67,6 @@ private:
 
     void cleanUpSurroundingAnchorPixels(StackNode &current_node);
     StackNode getNextChainPixel(StackNode &current_node);
-    bool validateNode(StackNode &node);
     bool areNeighbors(int offset1, int offset2);
     void cleanUpPenultimateSegmentPixel(Chain *chain, std::vector<cv::Point> &anchorSegment, bool is_first_child);
     void revertChainEdgePixel(Chain *&chain);
