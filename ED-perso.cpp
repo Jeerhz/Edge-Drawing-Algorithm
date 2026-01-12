@@ -201,6 +201,13 @@ void ED::ComputeGradient()
         }
     }
 }
+
+// Function that we we want to maximize to compute the gradient in a multi-level image using the DiZenzo method
+double F(double t, int gxx, int gyy, int gxy)
+{
+    return gxx * cos(t) * cos(t) + 2.0 * gxy * sin(t) * cos(t) + gyy * sin(t) * sin(t);
+};
+
 // This is part of EDColor, in this variant we use BGR channels and not Lab
 void ED::ComputeGradientMapByDiZenzo()
 {
@@ -236,26 +243,45 @@ void ED::ComputeGradientMapByDiZenzo()
             int gyB = com1 - com2 + ((int)smoothB_ptr[(i + 1) * image_width + j] - (int)smoothB_ptr[(i - 1) * image_width + j]);
 
             // Di Zenzo tensor components
-            int gxx = gxR * gxR + gxG * gxG + gxB * gxB; // u.u
-            int gyy = gyR * gyR + gyG * gyG + gyB * gyB; // v.v
-            int gxy = gxR * gyR + gxG * gyG + gxB * gyB; // u.v
+            int gxx = gxR * gxR + gxG * gxG + gxB * gxB; // g11
+            int gyy = gyR * gyR + gyG * gyG + gyB * gyB; // g22
+            int gxy = gxR * gyR + gxG * gyG + gxB * gyB; // g12
 
-            // Direction theta (gradient direction is perpendicular to edge)
-            double theta = 0.5 * atan2(2.0 * (double)gxy, (double)(gxx - gyy));
+            // atan2(Y,X) is the arctan function of Y / X and return values in the interval [−π/2, π/2].
+            // We add M_PI / 2 to shift the range to [0, π]. As suggested in DiZenzo article
+            double theta0 = 0.5 * atan2(2.0 * (double)gxy,
+                                        (double)(gxx - gyy)) +
+                            M_PI / 2.0;
 
-            // Gradient magnitude (Di Zenzo)
-            double val = 0.5 * ((double)gxx + (double)gyy + (double)(gxx - gyy) * cos(2.0 * theta) + 2.0 * (double)gxy * sin(2.0 * theta));
-            int grad = (int)(sqrt(std::max(0.0, val)) + 0.5);
-
-            // Store orientation (gradient perpendicular to edge)
-            if (theta >= -3.14159 / 4.0 && theta <= 3.14159 / 4.0)
-                gradOrientationImgPointer[idx] = EDGE_VERTICAL;
+            double theta1;
+            // We have two candidate angles
+            if (theta0 < M_PI / 2.0)
+                theta1 = theta0 + M_PI / 2.0;
             else
-                gradOrientationImgPointer[idx] = EDGE_HORIZONTAL;
+                theta1 = theta0 - M_PI / 2.0;
 
+            // Evaluate F at both candidate angles (once) and keep the maximum
+            double F_theta0 = F(theta0, gxx, gyy, gxy);
+            double F_theta1 = F(theta1, gxx, gyy, gxy);
+
+            double val = (F_theta1 > F_theta0) ? F_theta1 : F_theta0;
+            // 'Edge strength'computed as the square root of the maximum value
+            int grad = (int)sqrt(std::max(0.0, val));
+
+            // store gradient magnitude and update global max
             gradImgPointer[idx] = grad;
+
+            // Update maximum gradient value needed for scaling
             if (grad > max_val)
                 max_val = grad;
+
+            // set orientation based on the chosen angle's components (reuse which F was larger)
+            if (grad >= gradThresh)
+            {
+                double chosenTheta = (F_theta1 > F_theta0) ? theta1 : theta0;
+                double cos_theta = cos(chosenTheta), sin_theta = sin(chosenTheta);
+                gradOrientationImgPointer[idx] = (std::abs(cos_theta) >= std::abs(sin_theta)) ? EDGE_VERTICAL : EDGE_HORIZONTAL;
+            }
         }
     }
 
