@@ -77,17 +77,6 @@ ED::ED(cv::Mat _srcImage, GradientOperator _gradOperator, int _gradThresh, int _
         ComputeGradient();
     }
 
-    smoothImage = Mat(image_height, image_width, CV_8UC1);
-
-    if (sigma == 1.0)
-        GaussianBlur(srcImage, smoothImage, Size(5, 5), sigma);
-    else
-        GaussianBlur(srcImage, smoothImage, Size(), sigma);
-
-    smoothImgPointer = smoothImage.data;
-    std::cout << "Computing gradient map..." << std::endl;
-    ComputeGradient();
-
     ComputeAnchorPoints();
     JoinAnchorPointsUsingSortedAnchors();
 
