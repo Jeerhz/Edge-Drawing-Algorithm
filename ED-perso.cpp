@@ -476,14 +476,6 @@ void ED::extractFirstChildChains(Chain *anchor_chain_root, std::vector<Point> &a
     std::pair<int, std::vector<Chain *>> resp = anchor_chain_root->first_childChain->getAllChains(true);
     std::vector<Chain *> all_first_child_chains_in_longest_path = resp.second;
 
-    // Safely remove the first pixel of the first chain that is a processed stack duplicated in the second child of anchor root chain
-    if (!all_first_child_chains_in_longest_path.empty())
-    {
-        Chain *first_child_chain = all_first_child_chains_in_longest_path[0];
-        if (first_child_chain && !first_child_chain->pixels.empty())
-            first_child_chain->pixels.erase(first_child_chain->pixels.begin());
-    }
-
     for (size_t chain_index = 0; chain_index < all_first_child_chains_in_longest_path.size(); ++chain_index)
     {
         Chain *c = all_first_child_chains_in_longest_path[chain_index];
@@ -509,8 +501,7 @@ void ED::extractOtherChains(Chain *anchor_chain_root, std::vector<std::vector<Po
     std::pair<int, std::vector<Chain *>> resp_all = anchor_chain_root->getAllChains(false);
     std::vector<Chain *> all_anchor_root_chains = resp_all.second;
 
-    // TIPS: We know that index 0 is anchor root chain and index 1 is the first child so we can skip them
-    for (size_t k = 2; k < all_anchor_root_chains.size(); ++k)
+    for (size_t k = 0; k < all_anchor_root_chains.size(); ++k)
     {
         Chain *other_chain = all_anchor_root_chains[k];
         if (!other_chain)
@@ -712,7 +703,7 @@ void ED::exploreChain(StackNode &current_node, Chain *current_chain, int &total_
     cleanUpSurroundingAnchorPixels(current_node);
 
     // We add new nodes to the process stack in perpendicular directions to the edge with reference to this chain as a parent
-    // This
+    // This is different from the original implementation where the above node is the starting of the perpendicular sub-chains
     if (chain_orientation == EDGE_HORIZONTAL)
     {
         // Add UP and DOWN for horizontal chains if the pixels are valid
