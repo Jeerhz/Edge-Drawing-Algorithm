@@ -688,12 +688,15 @@ void ED::exploreChain(StackNode &current_node, Chain *current_chain, int &total_
     }
 
     // We have a valid pixel which gradient orientation does not match the exploration direction
+    // This does not match original implementation where this node is the starting of the perpendicular sub-chains
+    // We decide to add this last pixel to the current chain and add two other distinct pixels for the new chains in order to avoid duplicate pixels
     current_chain->pixels.push_back(current_node.offset);
     total_pixels_in_anchor_chain++;
     edgeImgPointer[current_node.offset] = EDGE_PIXEL;
     cleanUpSurroundingAnchorPixels(current_node);
 
     // We add new nodes to the process stack in perpendicular directions to the edge with reference to this chain as a parent
+    // This
     if (chain_orientation == EDGE_HORIZONTAL)
     {
         // Add UP and DOWN for horizontal chains if the pixels are valid
