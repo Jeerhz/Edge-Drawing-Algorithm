@@ -37,7 +37,7 @@ We refactored the Edge Detector and Lines Detector scripts in Cihan Topal and al
 
 ```bash
 git clone https://github.com/<username>/EDLINES-IMPLEMENTATION.git
-cd EDLINES-IMPLEMENTATION
+cd EDGE-DRAWING-ALGORITHM
 make init
 ```
 

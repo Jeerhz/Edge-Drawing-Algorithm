@@ -687,18 +687,29 @@ void ED::exploreChain(StackNode &current_node, Chain *current_chain, int &total_
             return;
     }
 
+    // We have a valid pixel which gradient orientation does not match the exploration direction
+    current_chain->pixels.push_back(current_node.offset);
+    total_pixels_in_anchor_chain++;
+    edgeImgPointer[current_node.offset] = EDGE_PIXEL;
+    cleanUpSurroundingAnchorPixels(current_node);
+
     // We add new nodes to the process stack in perpendicular directions to the edge with reference to this chain as a parent
     if (chain_orientation == EDGE_HORIZONTAL)
     {
-        // Add UP and DOWN for horizontal chains
-        process_stack.push(StackNode(current_node.offset, DOWN, current_chain));
-        process_stack.push(StackNode(current_node.offset, UP, current_chain));
+        // Add UP and DOWN for horizontal chains if the pixels are valid
+        // The border pixels were set to a low gradient threshold, so we do not need to check for out of bounds access
+        if (edgeImgPointer[current_node.offset + image_width] == EDGE_PIXEL || gradImgPointer[current_node.offset + image_width] < gradThresh)
+            process_stack.push(StackNode(current_node.offset, DOWN, current_chain));
+        if (edgeImgPointer[current_node.offset - image_width] == EDGE_PIXEL || gradImgPointer[current_node.offset - image_width] < gradThresh)
+            process_stack.push(StackNode(current_node.offset, UP, current_chain));
     }
     else
     {
         // Add LEFT and RIGHT for vertical chains
-        process_stack.push(StackNode(current_node.offset, RIGHT, current_chain));
-        process_stack.push(StackNode(current_node.offset, LEFT, current_chain));
+        if (edgeImgPointer[current_node.offset + 1] == EDGE_PIXEL || gradImgPointer[current_node.offset + 1] < gradThresh)
+            process_stack.push(StackNode(current_node.offset, RIGHT, current_chain));
+        if (edgeImgPointer[current_node.offset - 1] == EDGE_PIXEL || gradImgPointer[current_node.offset - 1] < gradThresh)
+            process_stack.push(StackNode(current_node.offset, LEFT, current_chain));
     }
 }
 
