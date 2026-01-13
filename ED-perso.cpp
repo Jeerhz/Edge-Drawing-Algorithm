@@ -451,20 +451,22 @@ void ED::extractSecondChildChains(Chain *anchor_chain_root, std::vector<Point> &
     std::pair<int, std::vector<Chain *>> resp = anchor_chain_root->second_childChain->getAllChains(true);
     std::vector<Chain *> all_second_child_chains_in_longest_path = resp.second;
 
-    for (size_t chain_index = 0; chain_index < all_second_child_chains_in_longest_path.size(); ++chain_index)
+    // iterate through all sub chains in the longest path, clean and add pixels to the anchor segment
+    for (size_t chain_index = all_second_child_chains_in_longest_path.size() - 1; chain_index > 0; --chain_index)
     {
-        Chain *c = all_second_child_chains_in_longest_path[chain_index];
-        if (!c || c->is_extracted)
+        Chain *chain = all_second_child_chains_in_longest_path[chain_index];
+        if (!chain || chain->is_extracted)
             continue;
 
-        cleanUpPenultimateSegmentPixel(c, anchorSegment, false);
+        cleanUpPenultimateSegmentPixel(chain, anchorSegment, false);
 
-        for (int pixel_index = (int)c->pixels.size() - 1; pixel_index >= 0; --pixel_index)
+        // add the chain pixels to the anchor segment
+        for (int pixel_index = (int)chain->pixels.size() - 1; pixel_index >= 0; --pixel_index)
         {
-            int pixel_offset = c->pixels[pixel_index];
+            int pixel_offset = chain->pixels[pixel_index];
             anchorSegment.push_back(Point(pixel_offset % image_width, pixel_offset / image_width));
         }
-        c->is_extracted = true;
+        chain->is_extracted = true;
     }
 }
 
@@ -478,21 +480,22 @@ void ED::extractFirstChildChains(Chain *anchor_chain_root, std::vector<Point> &a
 
     for (size_t chain_index = 0; chain_index < all_first_child_chains_in_longest_path.size(); ++chain_index)
     {
-        Chain *c = all_first_child_chains_in_longest_path[chain_index];
-        if (!c || c->is_extracted)
+        Chain *chain = all_first_child_chains_in_longest_path[chain_index];
+        if (!chain || chain->is_extracted)
             continue;
 
-        cleanUpPenultimateSegmentPixel(c, anchorSegment, true);
+        cleanUpPenultimateSegmentPixel(chain, anchorSegment, true);
 
-        for (size_t pixel_index = 0; pixel_index < c->pixels.size(); ++pixel_index)
+        for (size_t pixel_index = 0; pixel_index < chain->pixels.size(); ++pixel_index)
         {
-            int pixel_offset = c->pixels[pixel_index];
+            int pixel_offset = chain->pixels[pixel_index];
             anchorSegment.push_back(Point(pixel_offset % image_width, pixel_offset / image_width));
         }
-        c->is_extracted = true;
+        chain->is_extracted = true;
     }
 }
 
+// Extract the remaining significant chains that are not part of the main anchor segment
 void ED::extractOtherChains(Chain *anchor_chain_root, std::vector<std::vector<Point>> &anchorSegments)
 {
     if (!anchor_chain_root)
