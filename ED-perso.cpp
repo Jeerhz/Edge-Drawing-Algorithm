@@ -504,8 +504,10 @@ void ED::extractOtherChains(Chain *anchor_chain_root, std::vector<std::vector<Po
         return;
 
     std::pair<int, std::vector<Chain *>> resp_all = anchor_chain_root->getAllChains(false);
+    // This is all chains in the anchor root, traversed depth-first adding the first child first.
     std::vector<Chain *> all_anchor_root_chains = resp_all.second;
 
+    // Start the iteration from the anchor root and go deeper
     for (size_t k = 0; k < all_anchor_root_chains.size(); ++k)
     {
         Chain *other_chain = all_anchor_root_chains[k];
