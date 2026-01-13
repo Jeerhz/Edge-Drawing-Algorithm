@@ -443,6 +443,7 @@ void ED::cleanUpPenultimateSegmentPixel(Chain *chain, std::vector<cv::Point> &an
     }
 }
 
+// Backward extraction, we start from the end of the latest sub chain and move towards the anchor root
 void ED::extractSecondChildChains(Chain *anchor_chain_root, std::vector<Point> &anchorSegment)
 {
     if (!anchor_chain_root || !anchor_chain_root->second_childChain)
@@ -470,6 +471,7 @@ void ED::extractSecondChildChains(Chain *anchor_chain_root, std::vector<Point> &
     }
 }
 
+// Forward extraction, we start from the anchor root, and go deeper
 void ED::extractFirstChildChains(Chain *anchor_chain_root, std::vector<Point> &anchorSegment)
 {
     if (!anchor_chain_root || !anchor_chain_root->first_childChain)

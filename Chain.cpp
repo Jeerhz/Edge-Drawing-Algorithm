@@ -37,6 +37,7 @@ int Chain::pruneToLongestChain()
     }
 }
 
+// DFS traversal to collect all chains
 std::pair<int, std::vector<Chain *>> Chain::getAllChains(bool only_longest_path)
 {
     std::vector<Chain *> all_chains;
