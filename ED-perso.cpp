@@ -77,17 +77,6 @@ ED::ED(cv::Mat _srcImage, GradientOperator _gradOperator, int _gradThresh, int _
         ComputeGradient();
     }
 
-    smoothImage = Mat(image_height, image_width, CV_8UC1);
-
-    if (sigma == 1.0)
-        GaussianBlur(srcImage, smoothImage, Size(5, 5), sigma);
-    else
-        GaussianBlur(srcImage, smoothImage, Size(), sigma);
-
-    smoothImgPointer = smoothImage.data;
-    std::cout << "Computing gradient map..." << std::endl;
-    ComputeGradient();
-
     ComputeAnchorPoints();
     JoinAnchorPointsUsingSortedAnchors();
 
@@ -212,6 +201,13 @@ void ED::ComputeGradient()
         }
     }
 }
+
+// Function that we we want to maximize to compute the gradient in a multi-level image using the DiZenzo method
+double F(double t, int gxx, int gyy, int gxy)
+{
+    return gxx * cos(t) * cos(t) + 2.0 * gxy * sin(t) * cos(t) + gyy * sin(t) * sin(t);
+};
+
 // This is part of EDColor, in this variant we use BGR channels and not Lab
 void ED::ComputeGradientMapByDiZenzo()
 {
@@ -247,26 +243,45 @@ void ED::ComputeGradientMapByDiZenzo()
             int gyB = com1 - com2 + ((int)smoothB_ptr[(i + 1) * image_width + j] - (int)smoothB_ptr[(i - 1) * image_width + j]);
 
             // Di Zenzo tensor components
-            int gxx = gxR * gxR + gxG * gxG + gxB * gxB; // u.u
-            int gyy = gyR * gyR + gyG * gyG + gyB * gyB; // v.v
-            int gxy = gxR * gyR + gxG * gyG + gxB * gyB; // u.v
+            int gxx = gxR * gxR + gxG * gxG + gxB * gxB; // g11
+            int gyy = gyR * gyR + gyG * gyG + gyB * gyB; // g22
+            int gxy = gxR * gyR + gxG * gyG + gxB * gyB; // g12
 
-            // Direction theta (gradient direction is perpendicular to edge)
-            double theta = 0.5 * atan2(2.0 * (double)gxy, (double)(gxx - gyy));
+            // atan2(Y,X) is the arctan function of Y / X and return values in the interval [−π/2, π/2].
+            // We add M_PI / 2 to shift the range to [0, π]. As suggested in DiZenzo article
+            double theta0 = 0.5 * atan2(2.0 * (double)gxy,
+                                        (double)(gxx - gyy)) +
+                            M_PI / 2.0;
 
-            // Gradient magnitude (Di Zenzo)
-            double val = 0.5 * ((double)gxx + (double)gyy + (double)(gxx - gyy) * cos(2.0 * theta) + 2.0 * (double)gxy * sin(2.0 * theta));
-            int grad = (int)(sqrt(std::max(0.0, val)) + 0.5);
-
-            // Store orientation (gradient perpendicular to edge)
-            if (theta >= -3.14159 / 4.0 && theta <= 3.14159 / 4.0)
-                gradOrientationImgPointer[idx] = EDGE_VERTICAL;
+            double theta1;
+            // We have two candidate angles
+            if (theta0 < M_PI / 2.0)
+                theta1 = theta0 + M_PI / 2.0;
             else
-                gradOrientationImgPointer[idx] = EDGE_HORIZONTAL;
+                theta1 = theta0 - M_PI / 2.0;
 
+            // Evaluate F at both candidate angles (once) and keep the maximum
+            double F_theta0 = F(theta0, gxx, gyy, gxy);
+            double F_theta1 = F(theta1, gxx, gyy, gxy);
+
+            double val = (F_theta1 > F_theta0) ? F_theta1 : F_theta0;
+            // 'Edge strength'computed as the square root of the maximum value
+            int grad = (int)sqrt(std::max(0.0, val));
+
+            // store gradient magnitude and update global max
             gradImgPointer[idx] = grad;
+
+            // Update maximum gradient value needed for scaling
             if (grad > max_val)
                 max_val = grad;
+
+            // set orientation based on the chosen angle's components (reuse which F was larger)
+            if (grad >= gradThresh)
+            {
+                double chosenTheta = (F_theta1 > F_theta0) ? theta1 : theta0;
+                double cos_theta = cos(chosenTheta), sin_theta = sin(chosenTheta);
+                gradOrientationImgPointer[idx] = (std::abs(cos_theta) >= std::abs(sin_theta)) ? EDGE_VERTICAL : EDGE_HORIZONTAL;
+            }
         }
     }
 
@@ -401,28 +416,6 @@ void ED::revertChainEdgePixel(Chain *&chain)
     revertChainEdgePixel(chain->second_childChain);
 }
 
-int ED::pruneToLongestChain(Chain *&chain)
-{
-    if (!chain)
-        return 0;
-
-    int leftLen = chain->first_childChain ? pruneToLongestChain(chain->first_childChain) : 0;
-    int rightLen = chain->second_childChain ? pruneToLongestChain(chain->second_childChain) : 0;
-
-    if (leftLen >= rightLen)
-    {
-        if (chain->second_childChain)
-            chain->second_childChain = nullptr;
-        return chain->pixels.size() + leftLen;
-    }
-    else
-    {
-        if (chain->first_childChain)
-            chain->first_childChain = nullptr;
-        return chain->pixels.size() + rightLen;
-    }
-}
-
 bool ED::areNeighbors(int offset1, int offset2)
 {
     int row_distance = abs(offset1 / image_width - offset2 / image_width);
@@ -450,6 +443,7 @@ void ED::cleanUpPenultimateSegmentPixel(Chain *chain, std::vector<cv::Point> &an
     }
 }
 
+// Backward extraction, we start from the end of the latest sub chain and move towards the anchor root
 void ED::extractSecondChildChains(Chain *anchor_chain_root, std::vector<Point> &anchorSegment)
 {
     if (!anchor_chain_root || !anchor_chain_root->second_childChain)
@@ -458,23 +452,26 @@ void ED::extractSecondChildChains(Chain *anchor_chain_root, std::vector<Point> &
     std::pair<int, std::vector<Chain *>> resp = anchor_chain_root->second_childChain->getAllChains(true);
     std::vector<Chain *> all_second_child_chains_in_longest_path = resp.second;
 
-    for (size_t chain_index = 0; chain_index < all_second_child_chains_in_longest_path.size(); ++chain_index)
+    // iterate through all sub chains in the longest path, clean and add pixels to the anchor segment
+    for (size_t chain_index = all_second_child_chains_in_longest_path.size() - 1; chain_index > 0; --chain_index)
     {
-        Chain *c = all_second_child_chains_in_longest_path[chain_index];
-        if (!c || c->is_extracted)
+        Chain *chain = all_second_child_chains_in_longest_path[chain_index];
+        if (!chain || chain->is_extracted)
             continue;
 
-        cleanUpPenultimateSegmentPixel(c, anchorSegment, false);
+        cleanUpPenultimateSegmentPixel(chain, anchorSegment, false);
 
-        for (int pixel_index = (int)c->pixels.size() - 1; pixel_index >= 0; --pixel_index)
+        // add the chain pixels to the anchor segment
+        for (int pixel_index = (int)chain->pixels.size() - 1; pixel_index >= 0; --pixel_index)
         {
-            int pixel_offset = c->pixels[pixel_index];
+            int pixel_offset = chain->pixels[pixel_index];
             anchorSegment.push_back(Point(pixel_offset % image_width, pixel_offset / image_width));
         }
-        c->is_extracted = true;
+        chain->is_extracted = true;
     }
 }
 
+// Forward extraction, we start from the anchor root, and go deeper
 void ED::extractFirstChildChains(Chain *anchor_chain_root, std::vector<Point> &anchorSegment)
 {
     if (!anchor_chain_root || !anchor_chain_root->first_childChain)
@@ -483,41 +480,35 @@ void ED::extractFirstChildChains(Chain *anchor_chain_root, std::vector<Point> &a
     std::pair<int, std::vector<Chain *>> resp = anchor_chain_root->first_childChain->getAllChains(true);
     std::vector<Chain *> all_first_child_chains_in_longest_path = resp.second;
 
-    // Safely remove the first pixel of the first chain that is a processed stack duplicated in the second child of anchor root chain
-    if (!all_first_child_chains_in_longest_path.empty())
-    {
-        Chain *first_child_chain = all_first_child_chains_in_longest_path[0];
-        if (first_child_chain && !first_child_chain->pixels.empty())
-            first_child_chain->pixels.erase(first_child_chain->pixels.begin());
-    }
-
     for (size_t chain_index = 0; chain_index < all_first_child_chains_in_longest_path.size(); ++chain_index)
     {
-        Chain *c = all_first_child_chains_in_longest_path[chain_index];
-        if (!c || c->is_extracted)
+        Chain *chain = all_first_child_chains_in_longest_path[chain_index];
+        if (!chain || chain->is_extracted)
             continue;
 
-        cleanUpPenultimateSegmentPixel(c, anchorSegment, true);
+        cleanUpPenultimateSegmentPixel(chain, anchorSegment, true);
 
-        for (size_t pixel_index = 0; pixel_index < c->pixels.size(); ++pixel_index)
+        for (size_t pixel_index = 0; pixel_index < chain->pixels.size(); ++pixel_index)
         {
-            int pixel_offset = c->pixels[pixel_index];
+            int pixel_offset = chain->pixels[pixel_index];
             anchorSegment.push_back(Point(pixel_offset % image_width, pixel_offset / image_width));
         }
-        c->is_extracted = true;
+        chain->is_extracted = true;
     }
 }
 
+// Extract the remaining significant chains that are not part of the main anchor segment
 void ED::extractOtherChains(Chain *anchor_chain_root, std::vector<std::vector<Point>> &anchorSegments)
 {
     if (!anchor_chain_root)
         return;
 
     std::pair<int, std::vector<Chain *>> resp_all = anchor_chain_root->getAllChains(false);
+    // This is all chains in the anchor root, traversed depth-first adding the first child first.
     std::vector<Chain *> all_anchor_root_chains = resp_all.second;
 
-    // TIPS: We know that index 0 is anchor root chain and index 1 is the first child so we can skip them
-    for (size_t k = 2; k < all_anchor_root_chains.size(); ++k)
+    // Start the iteration from the anchor root and go deeper
+    for (size_t k = 0; k < all_anchor_root_chains.size(); ++k)
     {
         Chain *other_chain = all_anchor_root_chains[k];
         if (!other_chain)
@@ -594,16 +585,17 @@ void ED::JoinAnchorPointsUsingSortedAnchors()
         int total_pixels_in_anchor_chain = 0; // Count total pixels in the anchor chain and its children
 
         Chain *anchor_chain_root = new Chain();
-
-        if (gradImgPointer[anchorPixelOffset] == EDGE_VERTICAL)
+        // We initialize two distinct nodes to start anchor chain exploration in order to avoid duplicate pixels from the start.
+        // This is not done in the original implementation where we set the anchor point two times
+        if (gradOrientationImgPointer[anchorPixelOffset] == EDGE_VERTICAL)
         {
             process_stack.push(StackNode(anchorPixelOffset, DOWN, anchor_chain_root));
-            process_stack.push(StackNode(anchorPixelOffset, UP, anchor_chain_root));
+            process_stack.push(StackNode(anchorPixelOffset - image_width, UP, anchor_chain_root));
         }
         else
         {
             process_stack.push(StackNode(anchorPixelOffset, RIGHT, anchor_chain_root));
-            process_stack.push(StackNode(anchorPixelOffset, LEFT, anchor_chain_root));
+            process_stack.push(StackNode(anchorPixelOffset - 1, LEFT, anchor_chain_root));
         }
 
         while (!process_stack.empty())
@@ -691,11 +683,6 @@ StackNode ED::getNextChainPixel(StackNode &current_node)
     return StackNode(best_offset, dir, current_node.parent_chain);
 }
 
-bool ED::validateNode(StackNode &node)
-{
-    return (edgeImgPointer[node.offset] != EDGE_PIXEL) && (gradImgPointer[node.offset] >= gradThresh);
-}
-
 void ED::exploreChain(StackNode &current_node, Chain *current_chain, int &total_pixels_in_anchor_chain)
 {
 
@@ -710,22 +697,36 @@ void ED::exploreChain(StackNode &current_node, Chain *current_chain, int &total_
 
         current_node = getNextChainPixel(current_node);
 
-        if (!validateNode(current_node))
+        if (edgeImgPointer[current_node.offset] == EDGE_PIXEL || gradImgPointer[current_node.offset] < gradThresh)
             return;
     }
 
+    // We have a valid pixel which gradient orientation does not match the exploration direction
+    // This does not match original implementation where this node is the starting of the perpendicular sub-chains
+    // We decide to add this last pixel to the current chain and add two other distinct pixels for the new chains in order to avoid duplicate pixels
+    current_chain->pixels.push_back(current_node.offset);
+    total_pixels_in_anchor_chain++;
+    edgeImgPointer[current_node.offset] = EDGE_PIXEL;
+    cleanUpSurroundingAnchorPixels(current_node);
+
     // We add new nodes to the process stack in perpendicular directions to the edge with reference to this chain as a parent
+    // This is different from the original implementation where the above node is the starting of the perpendicular sub-chains
     if (chain_orientation == EDGE_HORIZONTAL)
     {
-        // Add UP and DOWN for horizontal chains
-        process_stack.push(StackNode(current_node.offset, DOWN, current_chain));
-        process_stack.push(StackNode(current_node.offset, UP, current_chain));
+        // Add UP and DOWN for horizontal chains if the pixels are valid
+        // The border pixels were set to a low gradient threshold, so we do not need to check for out of bounds access
+        if (edgeImgPointer[current_node.offset + image_width] == EDGE_PIXEL || gradImgPointer[current_node.offset + image_width] < gradThresh)
+            process_stack.push(StackNode(current_node.offset, DOWN, current_chain));
+        if (edgeImgPointer[current_node.offset - image_width] == EDGE_PIXEL || gradImgPointer[current_node.offset - image_width] < gradThresh)
+            process_stack.push(StackNode(current_node.offset, UP, current_chain));
     }
     else
     {
         // Add LEFT and RIGHT for vertical chains
-        process_stack.push(StackNode(current_node.offset, RIGHT, current_chain));
-        process_stack.push(StackNode(current_node.offset, LEFT, current_chain));
+        if (edgeImgPointer[current_node.offset + 1] == EDGE_PIXEL || gradImgPointer[current_node.offset + 1] < gradThresh)
+            process_stack.push(StackNode(current_node.offset, RIGHT, current_chain));
+        if (edgeImgPointer[current_node.offset - 1] == EDGE_PIXEL || gradImgPointer[current_node.offset - 1] < gradThresh)
+            process_stack.push(StackNode(current_node.offset, LEFT, current_chain));
     }
 }
 
