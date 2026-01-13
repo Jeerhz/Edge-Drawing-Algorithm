@@ -7,7 +7,7 @@
 using namespace cv;
 using namespace std;
 
-ED::ED(cv::Mat _srcImage, GradientOperator _gradOperator, int _gradThresh, int _anchorThresh, int _minPathLen, double _sigma, bool _sumFlag)
+ED::ED(cv::Mat _srcImage, GradientOperator _gradOperator, int _gradThresh, int _anchorThresh, double _sigma, bool _sumFlag)
 {
     srcImage = _srcImage;
     // detect if input is grayscale or BGR and prepare per-channel buffers for later use (Di Zenzo)
@@ -16,7 +16,6 @@ ED::ED(cv::Mat _srcImage, GradientOperator _gradOperator, int _gradThresh, int _
     gradOperator = _gradOperator;
     gradThresh = _gradThresh;
     anchorThresh = _anchorThresh;
-    minPathLen = _minPathLen;
     sigma = _sigma;
     sumFlag = _sumFlag;
     process_stack = ProcessStack();
@@ -93,7 +92,6 @@ ED::ED(const ED &cpyObj)
 
     gradThresh = cpyObj.gradThresh;
     anchorThresh = cpyObj.anchorThresh;
-    minPathLen = cpyObj.minPathLen;
     sigma = cpyObj.sigma;
     sumFlag = cpyObj.sumFlag;
 
@@ -521,8 +519,9 @@ void ED::extractOtherChains(Chain *anchor_chain_root, std::vector<std::vector<Po
         int other_chain_total_length = other_resp.first;
         std::vector<Chain *> other_chain_chainChilds_in_longest_path = other_resp.second;
 
-        if (other_chain_total_length < minPathLen)
-            continue;
+        // Check the significance of the chain in another way
+        // if (other_chain_total_length < minPathLen)
+        // continue;
 
         for (size_t chain_index = 0; chain_index < other_chain_chainChilds_in_longest_path.size(); ++chain_index)
         {
@@ -571,6 +570,75 @@ void ED::extractSegmentsFromChain(Chain *anchor_chain_root, std::vector<std::vec
     extractOtherChains(anchor_chain_root, anchorSegments);
 }
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////// SUPPLEMENTARY FUNCTION FOR VERSION WITHOUT MINLENPATH ////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void ED::computeGradientCDF()
+{
+    // Cumulative distribution (CDF) of gradient magnitudes:
+    // gradient_cdf[i] = proportion of pixels with gradient <= i
+    gradient_cdf = new double[MAX_GRAD_VALUE];
+    int *gradient_cumulative_histogram = new int[MAX_GRAD_VALUE];
+
+    // initialize histogram to zero
+    memset(gradient_cumulative_histogram, 0, sizeof(int) * MAX_GRAD_VALUE);
+
+    for (int i = 0; i < image_width * image_height; i++)
+        gradient_cumulative_histogram[gradImgPointer[i]]++;
+
+    // Compute cumulative histogram
+    for (int i = 1; i <= MAX_GRAD_VALUE; i++)
+        gradient_cumulative_histogram[i] += gradient_cumulative_histogram[i - 1];
+
+    // Compute gradient CDF array
+    for (int i = 0; i <= MAX_GRAD_VALUE; i++)
+        gradient_cdf[i] = ((double)gradient_cumulative_histogram[i] / (double)(image_height * image_width));
+
+    delete[] gradient_cumulative_histogram;
+}
+
+void ED::computeNumberSegmentPieces()
+{
+    number_segment_pieces = 0;
+    for (int i = 0; i < segmentPoints.size(); i++)
+    {
+        int len = (int)segmentPoints[i].size();
+        number_segment_pieces += (len * (len - 1)) / 2;
+    }
+}
+
+double ED::NFA(double prob, int len)
+{
+    double nfa = number_segment_pieces;
+    for (int i = 0; i < (int)(len / 2) && nfa > EPSILON; i++)
+        nfa *= prob;
+
+    return nfa;
+}
+
+//
+void ED::addPixelsToSegment(std::vector<Point> &segment, Chain *pruned_chain)
+{
+    if (!pruned_chain)
+        return;
+
+    std::vector<int> chain_pixels_offset = pruned_chain->pixels;
+
+    for (size_t pixel_index = 0; pixel_index < chain_pixels_offset.size(); ++pixel_index)
+    {
+        int pixel_offset = chain_pixels_offset[pixel_index];
+        segment.push_back(Point(pixel_offset % image_width, pixel_offset / image_width));
+    }
+}
+
+//////////////////// END SUPPLEMENTARY FUNCTION FOR VERSION WITHOUT MINLENPATH ///////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
 void ED::JoinAnchorPointsUsingSortedAnchors()
 {
     int *SortedAnchors = sortAnchorsByGradValue();
@@ -613,18 +681,16 @@ void ED::JoinAnchorPointsUsingSortedAnchors()
             exploreChain(currentNode, new_process_stack_chain, total_pixels_in_anchor_chain);
         }
 
-        if (total_pixels_in_anchor_chain < minPathLen)
-            revertChainEdgePixel(anchor_chain_root);
+        // Check significance of the chain another way
+        // if (total_pixels_in_anchor_chain < minPathLen)
+        //     revertChainEdgePixel(anchor_chain_root);
 
-        else
-        {
-            anchor_chain_root->first_childChain->pruneToLongestChain();
-            anchor_chain_root->second_childChain->pruneToLongestChain();
-            // Create a segment corresponding to this anchor chain
-            std::vector<std::vector<Point>> anchorSegments;
-            extractSegmentsFromChain(anchor_chain_root, anchorSegments);
-            segmentPoints.insert(segmentPoints.end(), anchorSegments.begin(), anchorSegments.end());
-        }
+        anchor_chain_root->first_childChain->pruneToLongestChain();
+        anchor_chain_root->second_childChain->pruneToLongestChain();
+        // Create a segment corresponding to this anchor chain
+        std::vector<std::vector<Point>> anchorSegments;
+        extractSegmentsFromChain(anchor_chain_root, anchorSegments);
+        segmentPoints.insert(segmentPoints.end(), anchorSegments.begin(), anchorSegments.end());
 
         RemoveAll(anchor_chain_root);
     }

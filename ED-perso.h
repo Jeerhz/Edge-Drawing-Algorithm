@@ -24,7 +24,7 @@ class ED
 {
 
 public:
-    ED(cv::Mat _srcImage, GradientOperator _gradOperator, int _gradThresh = 20, int _anchorThresh = 0, int _minPathLen = 10, double _sigma = 1.0, bool _sumFlag = true);
+    ED(cv::Mat _srcImage, GradientOperator _gradOperator, int _gradThresh = 20, int _anchorThresh = 0, double _sigma = 1.0, bool _sumFlag = true);
     ED(const ED &cpyObj);
     ED();
 
@@ -64,6 +64,17 @@ private:
     void extractFirstChildChains(Chain *anchor_chain_root, std::vector<cv::Point> &anchorSegment);
     void extractOtherChains(Chain *anchor_chain_root, std::vector<std::vector<cv::Point>> &anchorSegments);
     int *sortAnchorsByGradValue();
+
+    // For the version of ED without minLenPath
+    ///////////////////////////////////////////
+    void computeGradientCDF();
+    double NFA(double prob, int len);
+    void computeNumberSegmentPieces();
+    void addPixelsToSegment(std::vector<Point> &segment, Chain *pruned_chain);
+    int number_segment_pieces;
+    double *gradient_cdf;
+    ///////////////////////////////////////////
+    ///////////////////////////////////////////
 
     void cleanUpSurroundingAnchorPixels(StackNode &current_node);
     StackNode getNextChainPixel(StackNode &current_node);
