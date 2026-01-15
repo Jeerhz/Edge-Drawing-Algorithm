@@ -59,11 +59,7 @@ private:
     void ComputeAnchorPoints();
     void JoinAnchorPointsUsingSortedAnchors();
     void exploreChain(StackNode &current_node, Chain *current_chain, int &total_pixels_in_anchor_chain);
-    void extractSegmentsFromChain(Chain *chain, std::vector<std::vector<cv::Point>> &anchorSegments);
-    void extractSecondChildChains(Chain *anchor_chain_root, std::vector<cv::Point> &anchorSegment);
-    void extractFirstChildChains(Chain *anchor_chain_root, std::vector<cv::Point> &anchorSegment);
-    void extractOtherChains(Chain *anchor_chain_root, std::vector<std::vector<cv::Point>> &anchorSegments);
-    void extractOtherChainsRecur(Chain *anchor_chain_root, std::vector<std::vector<cv::Point>> &anchorSegments);
+    void extractChainsRecur(Chain *anchor_chain_root, std::vector<std::vector<cv::Point>> &anchorSegments);
     int *sortAnchorsByGradValue();
 
     void cleanUpSurroundingAnchorPixels(StackNode &current_node);

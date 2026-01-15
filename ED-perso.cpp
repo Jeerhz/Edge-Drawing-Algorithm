@@ -423,7 +423,7 @@ bool ED::areNeighbors(int offset1, int offset2)
     return (row_distance <= 1 && col_distance <= 1);
 }
 
-// We take the last or first pixel of the current processed chain and clean its neighbors in the segment
+// We take the last (or first for the first child chain) pixel of the current processed chain and clean its neighbors in the segment
 void ED::cleanUpPenultimateSegmentPixel(Chain *chain, std::vector<cv::Point> &anchorSegment, bool is_first_child)
 {
     if (!chain || chain->pixels.empty())
@@ -443,117 +443,17 @@ void ED::cleanUpPenultimateSegmentPixel(Chain *chain, std::vector<cv::Point> &an
     }
 }
 
-// Backward extraction, we start from the end of the latest sub chain and move towards the anchor root
-void ED::extractSecondChildChains(Chain *anchor_chain_root, std::vector<Point> &anchorSegment)
-{
-    if (!anchor_chain_root || !anchor_chain_root->second_childChain)
-        return;
-
-    std::pair<int, std::vector<Chain *>> resp = anchor_chain_root->second_childChain->getAllChains(true);
-    std::vector<Chain *> all_second_child_chains_in_longest_path = resp.second;
-
-    // iterate through all sub chains in the longest path, clean and add pixels to the anchor segment
-    for (size_t chain_index = all_second_child_chains_in_longest_path.size() - 1; chain_index > 0; --chain_index)
-    {
-        Chain *chain = all_second_child_chains_in_longest_path[chain_index];
-        if (!chain || chain->is_extracted)
-            break;
-
-        cleanUpPenultimateSegmentPixel(chain, anchorSegment, false);
-
-        // add the chain pixels to the anchor segment
-        for (int pixel_index = (int)chain->pixels.size() - 1; pixel_index >= 0; --pixel_index)
-        {
-            int pixel_offset = chain->pixels[pixel_index];
-            anchorSegment.push_back(Point(pixel_offset % image_width, pixel_offset / image_width));
-        }
-        chain->is_extracted = true;
-    }
-}
-
-// Forward extraction, we start from the anchor root, and go deeper
-void ED::extractFirstChildChains(Chain *anchor_chain_root, std::vector<Point> &anchorSegment)
-{
-    if (!anchor_chain_root || !anchor_chain_root->first_childChain)
-        return;
-
-    std::pair<int, std::vector<Chain *>> resp = anchor_chain_root->first_childChain->getAllChains(true);
-    std::vector<Chain *> all_first_child_chains_in_longest_path = resp.second;
-
-    for (size_t chain_index = 0; chain_index < all_first_child_chains_in_longest_path.size(); ++chain_index)
-    {
-        Chain *chain = all_first_child_chains_in_longest_path[chain_index];
-        if (!chain || chain->is_extracted)
-            break;
-
-        cleanUpPenultimateSegmentPixel(chain, anchorSegment, true);
-
-        for (size_t pixel_index = 0; pixel_index < chain->pixels.size(); ++pixel_index)
-        {
-            int pixel_offset = chain->pixels[pixel_index];
-            anchorSegment.push_back(Point(pixel_offset % image_width, pixel_offset / image_width));
-        }
-        chain->is_extracted = true;
-    }
-}
-
-// Extract the remaining significant chains that are not part of the main anchor segment
-void ED::extractOtherChains(Chain *anchor_chain_root, std::vector<std::vector<Point>> &anchorSegments)
-{
-    if (!anchor_chain_root)
-        return;
-
-    std::pair<int, std::vector<Chain *>> resp_all = anchor_chain_root->getAllChains(false);
-    // This is all chains in the anchor root, traversed depth-first adding the first child first.
-    std::vector<Chain *> all_anchor_root_chains = resp_all.second;
-
-    // Start the iteration from the anchor root and go deeper
-    for (size_t k = 0; k < all_anchor_root_chains.size(); ++k)
-    {
-        Chain *other_chain = all_anchor_root_chains[k];
-        if (!other_chain)
-            continue;
-
-        std::vector<Point> otherAnchorSegment;
-        other_chain->pruneToLongestChain();
-
-        std::pair<int, std::vector<Chain *>> other_resp = other_chain->getAllChains(true);
-        int other_chain_total_length = other_resp.first;
-        std::vector<Chain *> other_chain_chainChilds_in_longest_path = other_resp.second;
-
-        if (other_chain_total_length < minPathLen)
-            continue;
-
-        for (size_t chain_index = 0; chain_index < other_chain_chainChilds_in_longest_path.size(); ++chain_index)
-        {
-            Chain *other_chain_childChain = other_chain_chainChilds_in_longest_path[chain_index];
-            if (!other_chain_childChain || other_chain_childChain->is_extracted)
-                break;
-
-            cleanUpPenultimateSegmentPixel(other_chain_childChain, otherAnchorSegment, true);
-
-            for (size_t pixel_index = 0; pixel_index < other_chain_childChain->pixels.size(); ++pixel_index)
-            {
-                int pixel_offset = other_chain_childChain->pixels[pixel_index];
-                otherAnchorSegment.push_back(Point(pixel_offset % image_width, pixel_offset / image_width));
-            }
-            other_chain_childChain->is_extracted = true;
-        }
-
-        if (!otherAnchorSegment.empty())
-            anchorSegments.push_back(otherAnchorSegment);
-    }
-}
-
 // Explore the binary graph by depth first from the children of the anchor root.
 // Prune the considered node to its longest path. Add the childnode that is not from longest path to the processed stack
 // Call cleanUpPenultimateSegmentPixel with a forward pass, add the chains pixels to the segment before processing to the next stack node
-void ED::extractOtherChainsRecur(Chain *anchor_chain_root, std::vector<std::vector<Point>> &anchorSegments)
+// To reconstruct the main segment, when we arrive to the segment from the second main child, we revert the segment and add it to the first segment.
+void ED::extractChainsRecur(Chain *anchor_chain_root, std::vector<std::vector<Point>> &anchorSegments)
 {
     // We assume that main children chains have already been extracted
-    // Store the pointer to the main children in order to skip them
+    // Store the pointer to the main children in order to reconstruct the 'main segment'
     Chain *main_first_child = anchor_chain_root->first_childChain;
     Chain *main_second_child = anchor_chain_root->second_childChain;
+    bool is_first_pass = true;
 
     // Explore the whole chain depth first
     std::stack<Chain *> chain_stack;
@@ -577,7 +477,7 @@ void ED::extractOtherChainsRecur(Chain *anchor_chain_root, std::vector<std::vect
             chain_stack.push(current_chain->first_childChain);
 
         // Skip the extraction of the main children chains (already extracted) or if the longest path is too short
-        if (current_chain == main_first_child || current_chain == main_second_child || nb_pixels_longest_path < minPathLen)
+        if (nb_pixels_longest_path < minPathLen)
             continue;
 
         // Extraction of the longest path of the current chain into a new segment
@@ -599,36 +499,29 @@ void ED::extractOtherChainsRecur(Chain *anchor_chain_root, std::vector<std::vect
                 currentSegment.push_back(Point(child_chain->pixels[pixel_index] % image_width, child_chain->pixels[pixel_index] / image_width));
         }
 
-        // If the current segment is not empty, add it to the anchor segments
-        if (!currentSegment.empty())
+        if (currentSegment.empty())
+        {
+            is_first_pass = false;
+            continue;
+        }
+
+        // If the current segment is not empty, add it to the anchor segments or to the main segment for the main childs
+        // Clean possible boucle at the beginning of the segment
+        if (currentSegment.size() > 1 && areNeighbors(currentSegment[1].y * image_width + currentSegment[1].x,
+                                                      currentSegment.back().y * image_width + currentSegment.back().x))
+            currentSegment.erase(currentSegment.begin());
+
+        if ((current_chain == main_first_child || current_chain == main_second_child) && !is_first_pass)
+        {
+            // Revert the order of the main child segment and add it to the first segment
+            std::reverse(currentSegment.begin(), currentSegment.end());
+            anchorSegments[0].insert(anchorSegments[0].end(), currentSegment.begin(), currentSegment.end());
+        }
+        else
             anchorSegments.push_back(currentSegment);
+
+        is_first_pass = false;
     }
-}
-
-void ED::extractSegmentsFromChain(Chain *anchor_chain_root, std::vector<std::vector<Point>> &anchorSegments)
-{
-    if (!anchor_chain_root)
-        return;
-
-    std::vector<Point> anchorSegment;
-
-    // second child (backward)
-    extractSecondChildChains(anchor_chain_root, anchorSegment);
-
-    // first child (forward)
-    extractFirstChildChains(anchor_chain_root, anchorSegment);
-
-    // Clean possible boucle at the beginning of the segment
-    if (anchorSegment.size() > 1 && areNeighbors(anchorSegment[1].y * image_width + anchorSegment[1].x,
-                                                 anchorSegment.back().y * image_width + anchorSegment.back().x))
-        anchorSegment.erase(anchorSegment.begin());
-
-    // Add the main anchor segment to the anchor segments (only if non-empty)
-    if (!anchorSegment.empty())
-        anchorSegments.push_back(anchorSegment);
-
-    // other long segments attached to anchor root
-    extractOtherChains(anchor_chain_root, anchorSegments);
 }
 
 void ED::JoinAnchorPointsUsingSortedAnchors()
@@ -682,7 +575,7 @@ void ED::JoinAnchorPointsUsingSortedAnchors()
             anchor_chain_root->second_childChain->pruneToLongestChain();
             // Create a segment corresponding to this anchor chain
             std::vector<std::vector<Point>> anchorSegments;
-            extractSegmentsFromChain(anchor_chain_root, anchorSegments);
+            extractChainsRecur(anchor_chain_root, anchorSegments);
             segmentPoints.insert(segmentPoints.end(), anchorSegments.begin(), anchorSegments.end());
         }
 
