@@ -553,8 +553,6 @@ void ED::JoinAnchorPointsUsingSortedAnchors()
 
         while (!process_stack.empty())
         {
-            std::cout << "Processing stack node at offset: " << process_stack.top().offset << std::endl;
-            std::cout << "Stack Size: " << process_stack.size() << std::endl;
             StackNode currentNode = process_stack.top();
             process_stack.pop();
 
