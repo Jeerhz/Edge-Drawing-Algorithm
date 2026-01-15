@@ -62,7 +62,7 @@ private:
     void extractChainsRecur(Chain *anchor_chain_root, std::vector<std::vector<cv::Point>> &anchorSegments);
     int *sortAnchorsByGradValue();
 
-    void cleanUpSurroundingAnchorPixels(const StackNode &current_node);
+    void cleanUpSurroundingAnchorPixels(const StackNode &current_node, bool clear_perpendicular = false);
     StackNode getNextChainPixel(const StackNode &current_node);
     bool areNeighbors(int offset1, int offset2);
     void cleanUpPenultimateSegmentPixel(Chain *chain, std::vector<cv::Point> &anchorSegment, bool is_first_child);
