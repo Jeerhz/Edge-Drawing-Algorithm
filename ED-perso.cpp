@@ -553,12 +553,10 @@ void ED::JoinAnchorPointsUsingSortedAnchors()
 
         while (!process_stack.empty())
         {
+            std::cout << "Processing stack node at offset: " << process_stack.top().offset << std::endl;
+            std::cout << "Stack Size: " << process_stack.size() << std::endl;
             StackNode currentNode = process_stack.top();
             process_stack.pop();
-
-            // processed stack pixel are in two chains in opposite directions, we track duplicates
-            if (edgeImgPointer[currentNode.offset] != EDGE_PIXEL)
-                total_pixels_in_anchor_chain--;
 
             Chain *new_process_stack_chain = new Chain(currentNode.node_direction, currentNode.parent_chain);
             setChildToChain(new_process_stack_chain->parent_chain, new_process_stack_chain);
@@ -638,7 +636,6 @@ StackNode ED::getNextChainPixel(StackNode &current_node)
 
 void ED::exploreChain(StackNode &current_node, Chain *current_chain, int &total_pixels_in_anchor_chain)
 {
-
     GradOrientation chain_orientation = current_chain->direction == LEFT || current_chain->direction == RIGHT ? EDGE_HORIZONTAL : EDGE_VERTICAL;
     // Explore until we find change direction or we hit an edge pixel or the gradient is below threshold
     while (gradOrientationImgPointer[current_node.offset] == chain_orientation)
@@ -668,18 +665,18 @@ void ED::exploreChain(StackNode &current_node, Chain *current_chain, int &total_
     {
         // Add UP and DOWN for horizontal chains if the pixels are valid
         // The border pixels were set to a low gradient threshold, so we do not need to check for out of bounds access
-        if (edgeImgPointer[current_node.offset + image_width] == EDGE_PIXEL || gradImgPointer[current_node.offset + image_width] < gradThresh)
-            process_stack.push(StackNode(current_node.offset, DOWN, current_chain));
-        if (edgeImgPointer[current_node.offset - image_width] == EDGE_PIXEL || gradImgPointer[current_node.offset - image_width] < gradThresh)
-            process_stack.push(StackNode(current_node.offset, UP, current_chain));
+        if (edgeImgPointer[current_node.offset + image_width] != EDGE_PIXEL && gradImgPointer[current_node.offset + image_width] >= gradThresh)
+            process_stack.push(StackNode(current_node.offset + image_width, DOWN, current_chain));
+        if (edgeImgPointer[current_node.offset - image_width] != EDGE_PIXEL && gradImgPointer[current_node.offset - image_width] >= gradThresh)
+            process_stack.push(StackNode(current_node.offset - image_width, UP, current_chain));
     }
     else
     {
         // Add LEFT and RIGHT for vertical chains
-        if (edgeImgPointer[current_node.offset + 1] == EDGE_PIXEL || gradImgPointer[current_node.offset + 1] < gradThresh)
-            process_stack.push(StackNode(current_node.offset, RIGHT, current_chain));
-        if (edgeImgPointer[current_node.offset - 1] == EDGE_PIXEL || gradImgPointer[current_node.offset - 1] < gradThresh)
-            process_stack.push(StackNode(current_node.offset, LEFT, current_chain));
+        if (edgeImgPointer[current_node.offset + 1] != EDGE_PIXEL && gradImgPointer[current_node.offset + 1] >= gradThresh)
+            process_stack.push(StackNode(current_node.offset + 1, RIGHT, current_chain));
+        if (edgeImgPointer[current_node.offset - 1] != EDGE_PIXEL && gradImgPointer[current_node.offset - 1] >= gradThresh)
+            process_stack.push(StackNode(current_node.offset - 1, LEFT, current_chain));
     }
 }
 
