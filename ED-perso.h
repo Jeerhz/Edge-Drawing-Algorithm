@@ -63,6 +63,7 @@ private:
     void extractSecondChildChains(Chain *anchor_chain_root, std::vector<cv::Point> &anchorSegment);
     void extractFirstChildChains(Chain *anchor_chain_root, std::vector<cv::Point> &anchorSegment);
     void extractOtherChains(Chain *anchor_chain_root, std::vector<std::vector<cv::Point>> &anchorSegments);
+    void extractOtherChainsRecur(Chain *anchor_chain_root, std::vector<std::vector<cv::Point>> &anchorSegments);
     int *sortAnchorsByGradValue();
 
     void cleanUpSurroundingAnchorPixels(StackNode &current_node);

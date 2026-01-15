@@ -545,6 +545,66 @@ void ED::extractOtherChains(Chain *anchor_chain_root, std::vector<std::vector<Po
     }
 }
 
+// Explore the binary graph by depth first from the children of the anchor root.
+// Prune the considered node to its longest path. Add the childnode that is not from longest path to the processed stack
+// Call cleanUpPenultimateSegmentPixel with a forward pass, add the chains pixels to the segment before processing to the next stack node
+void ED::extractOtherChainsRecur(Chain *anchor_chain_root, std::vector<std::vector<Point>> &anchorSegments)
+{
+    // We assume that main children chains have already been extracted
+    // Store the pointer to the main children in order to skip them
+    Chain *main_first_child = anchor_chain_root->first_childChain;
+    Chain *main_second_child = anchor_chain_root->second_childChain;
+
+    // Explore the whole chain depth first
+    std::stack<Chain *> chain_stack;
+    chain_stack.push(anchor_chain_root);
+
+    while (!chain_stack.empty())
+    {
+        Chain *current_chain = chain_stack.top();
+        chain_stack.pop();
+
+        if (current_chain == nullptr)
+            continue;
+
+        // Compute the longest path from the current chain
+        int nb_pixels_longest_path = current_chain->pruneToLongestChain();
+
+        // add the child that is not part of the longest path in the stack
+        if (current_chain->is_first_childChain_longest_path)
+            chain_stack.push(current_chain->second_childChain);
+        else
+            chain_stack.push(current_chain->first_childChain);
+
+        // Skip the extraction of the main children chains (already extracted) or if the longest path is too short
+        if (current_chain == main_first_child || current_chain == main_second_child || nb_pixels_longest_path < minPathLen)
+            continue;
+
+        // Extraction of the longest path of the current chain into a new segment
+        std::pair<int, std::vector<Chain *>> all_chains_resp = current_chain->getAllChains(true);
+        std::vector<Chain *> chainChilds_in_longest_path = all_chains_resp.second;
+
+        // Initialize a segment that will hold the points of the current chain longest path
+        std::vector<Point> currentSegment;
+        // Extract the pixels and add them to the current segment
+        for (size_t chain_index = 0; chain_index < chainChilds_in_longest_path.size(); ++chain_index)
+        {
+            Chain *child_chain = chainChilds_in_longest_path[chain_index];
+            if (!child_chain)
+                break;
+
+            cleanUpPenultimateSegmentPixel(child_chain, currentSegment, true);
+
+            for (size_t pixel_index = 0; pixel_index < child_chain->pixels.size(); ++pixel_index)
+                currentSegment.push_back(Point(child_chain->pixels[pixel_index] % image_width, child_chain->pixels[pixel_index] / image_width));
+        }
+
+        // If the current segment is not empty, add it to the anchor segments
+        if (!currentSegment.empty())
+            anchorSegments.push_back(currentSegment);
+    }
+}
+
 void ED::extractSegmentsFromChain(Chain *anchor_chain_root, std::vector<std::vector<Point>> &anchorSegments)
 {
     if (!anchor_chain_root)
