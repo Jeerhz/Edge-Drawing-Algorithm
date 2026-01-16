@@ -423,7 +423,7 @@ bool ED::areNeighbors(int offset1, int offset2)
     return (row_distance <= 1 && col_distance <= 1);
 }
 
-// We take the last or first pixel of the current processed chain and clean its neighbors in the segment
+// We take the last (or first for the first child chain) pixel of the current processed chain and clean its neighbors in the segment
 void ED::cleanUpPenultimateSegmentPixel(Chain *chain, std::vector<cv::Point> &anchorSegment, bool is_first_child)
 {
     if (!chain || chain->pixels.empty())
@@ -443,132 +443,85 @@ void ED::cleanUpPenultimateSegmentPixel(Chain *chain, std::vector<cv::Point> &an
     }
 }
 
-// Backward extraction, we start from the end of the latest sub chain and move towards the anchor root
-void ED::extractSecondChildChains(Chain *anchor_chain_root, std::vector<Point> &anchorSegment)
+// Explore the binary graph by depth first from the children of the anchor root.
+// Prune the considered node to its longest path. Add the childnode that is not from longest path to the processed stack
+// Call cleanUpPenultimateSegmentPixel with a forward pass, add the chains pixels to the segment before processing to the next stack node
+// To reconstruct the main segment, when we arrive to the segment from the second main child, we revert the segment and add it to the first segment.
+void ED::extractChainsRecur(Chain *anchor_chain_root, std::vector<std::vector<Point>> &anchorSegments)
 {
-    if (!anchor_chain_root || !anchor_chain_root->second_childChain)
-        return;
+    // We assume that main children chains have already been extracted
+    // Store the pointer to the main children in order to reconstruct the 'main segment'
+    Chain *main_first_child = anchor_chain_root->first_childChain;
+    Chain *main_second_child = anchor_chain_root->second_childChain;
+    bool is_first_pass = true;
 
-    std::pair<int, std::vector<Chain *>> resp = anchor_chain_root->second_childChain->getAllChains(true);
-    std::vector<Chain *> all_second_child_chains_in_longest_path = resp.second;
+    // Explore the whole chain depth first
+    std::stack<Chain *> chain_stack;
+    chain_stack.push(anchor_chain_root);
 
-    // iterate through all sub chains in the longest path, clean and add pixels to the anchor segment
-    for (size_t chain_index = all_second_child_chains_in_longest_path.size() - 1; chain_index > 0; --chain_index)
+    while (!chain_stack.empty())
     {
-        Chain *chain = all_second_child_chains_in_longest_path[chain_index];
-        if (!chain || chain->is_extracted)
-            break;
+        Chain *current_chain = chain_stack.top();
+        chain_stack.pop();
 
-        cleanUpPenultimateSegmentPixel(chain, anchorSegment, false);
-
-        // add the chain pixels to the anchor segment
-        for (int pixel_index = (int)chain->pixels.size() - 1; pixel_index >= 0; --pixel_index)
-        {
-            int pixel_offset = chain->pixels[pixel_index];
-            anchorSegment.push_back(Point(pixel_offset % image_width, pixel_offset / image_width));
-        }
-        chain->is_extracted = true;
-    }
-}
-
-// Forward extraction, we start from the anchor root, and go deeper
-void ED::extractFirstChildChains(Chain *anchor_chain_root, std::vector<Point> &anchorSegment)
-{
-    if (!anchor_chain_root || !anchor_chain_root->first_childChain)
-        return;
-
-    std::pair<int, std::vector<Chain *>> resp = anchor_chain_root->first_childChain->getAllChains(true);
-    std::vector<Chain *> all_first_child_chains_in_longest_path = resp.second;
-
-    for (size_t chain_index = 0; chain_index < all_first_child_chains_in_longest_path.size(); ++chain_index)
-    {
-        Chain *chain = all_first_child_chains_in_longest_path[chain_index];
-        if (!chain || chain->is_extracted)
-            break;
-
-        cleanUpPenultimateSegmentPixel(chain, anchorSegment, true);
-
-        for (size_t pixel_index = 0; pixel_index < chain->pixels.size(); ++pixel_index)
-        {
-            int pixel_offset = chain->pixels[pixel_index];
-            anchorSegment.push_back(Point(pixel_offset % image_width, pixel_offset / image_width));
-        }
-        chain->is_extracted = true;
-    }
-}
-
-// Extract the remaining significant chains that are not part of the main anchor segment
-void ED::extractOtherChains(Chain *anchor_chain_root, std::vector<std::vector<Point>> &anchorSegments)
-{
-    if (!anchor_chain_root)
-        return;
-
-    std::pair<int, std::vector<Chain *>> resp_all = anchor_chain_root->getAllChains(false);
-    // This is all chains in the anchor root, traversed depth-first adding the first child first.
-    std::vector<Chain *> all_anchor_root_chains = resp_all.second;
-
-    // Start the iteration from the anchor root and go deeper
-    for (size_t k = 0; k < all_anchor_root_chains.size(); ++k)
-    {
-        Chain *other_chain = all_anchor_root_chains[k];
-        if (!other_chain)
+        if (current_chain == nullptr)
             continue;
 
-        std::vector<Point> otherAnchorSegment;
-        other_chain->pruneToLongestChain();
+        // Compute the longest path from the current chain
+        int nb_pixels_longest_path = current_chain->pruneToLongestChain();
 
-        std::pair<int, std::vector<Chain *>> other_resp = other_chain->getAllChains(true);
-        int other_chain_total_length = other_resp.first;
-        std::vector<Chain *> other_chain_chainChilds_in_longest_path = other_resp.second;
+        // add the child that is not part of the longest path in the stack
+        if (current_chain->is_first_childChain_longest_path)
+            chain_stack.push(current_chain->second_childChain);
+        else
+            chain_stack.push(current_chain->first_childChain);
 
-        if (other_chain_total_length < minPathLen)
+        // Skip the extraction of the main children chains (already extracted) or if the longest path is too short
+        if (nb_pixels_longest_path < minPathLen)
             continue;
 
-        for (size_t chain_index = 0; chain_index < other_chain_chainChilds_in_longest_path.size(); ++chain_index)
+        // Extraction of the longest path of the current chain into a new segment
+        std::pair<int, std::vector<Chain *>> all_chains_resp = current_chain->getAllChains(true);
+        std::vector<Chain *> chainChilds_in_longest_path = all_chains_resp.second;
+
+        // Initialize a segment that will hold the points of the current chain longest path
+        std::vector<Point> currentSegment;
+        // Extract the pixels and add them to the current segment
+        for (size_t chain_index = 0; chain_index < chainChilds_in_longest_path.size(); ++chain_index)
         {
-            Chain *other_chain_childChain = other_chain_chainChilds_in_longest_path[chain_index];
-            if (!other_chain_childChain || other_chain_childChain->is_extracted)
+            Chain *child_chain = chainChilds_in_longest_path[chain_index];
+            if (!child_chain)
                 break;
 
-            cleanUpPenultimateSegmentPixel(other_chain_childChain, otherAnchorSegment, true);
+            cleanUpPenultimateSegmentPixel(child_chain, currentSegment, true);
 
-            for (size_t pixel_index = 0; pixel_index < other_chain_childChain->pixels.size(); ++pixel_index)
-            {
-                int pixel_offset = other_chain_childChain->pixels[pixel_index];
-                otherAnchorSegment.push_back(Point(pixel_offset % image_width, pixel_offset / image_width));
-            }
-            other_chain_childChain->is_extracted = true;
+            for (size_t pixel_index = 0; pixel_index < child_chain->pixels.size(); ++pixel_index)
+                currentSegment.push_back(Point(child_chain->pixels[pixel_index] % image_width, child_chain->pixels[pixel_index] / image_width));
         }
 
-        if (!otherAnchorSegment.empty())
-            anchorSegments.push_back(otherAnchorSegment);
+        if (currentSegment.empty())
+        {
+            is_first_pass = false;
+            continue;
+        }
+
+        // If the current segment is not empty, add it to the anchor segments or to the main segment for the main childs
+        // Clean possible boucle at the beginning of the segment
+        if (currentSegment.size() > 1 && areNeighbors(currentSegment[1].y * image_width + currentSegment[1].x,
+                                                      currentSegment.back().y * image_width + currentSegment.back().x))
+            currentSegment.erase(currentSegment.begin());
+
+        if ((current_chain == main_first_child || current_chain == main_second_child) && !is_first_pass)
+        {
+            // Revert the order of the main child segment and add it to the first segment
+            std::reverse(currentSegment.begin(), currentSegment.end());
+            anchorSegments[0].insert(anchorSegments[0].end(), currentSegment.begin(), currentSegment.end());
+        }
+        else
+            anchorSegments.push_back(currentSegment);
+
+        is_first_pass = false;
     }
-}
-
-void ED::extractSegmentsFromChain(Chain *anchor_chain_root, std::vector<std::vector<Point>> &anchorSegments)
-{
-    if (!anchor_chain_root)
-        return;
-
-    std::vector<Point> anchorSegment;
-
-    // second child (backward)
-    extractSecondChildChains(anchor_chain_root, anchorSegment);
-
-    // first child (forward)
-    extractFirstChildChains(anchor_chain_root, anchorSegment);
-
-    // Clean possible boucle at the beginning of the segment
-    if (anchorSegment.size() > 1 && areNeighbors(anchorSegment[1].y * image_width + anchorSegment[1].x,
-                                                 anchorSegment.back().y * image_width + anchorSegment.back().x))
-        anchorSegment.erase(anchorSegment.begin());
-
-    // Add the main anchor segment to the anchor segments (only if non-empty)
-    if (!anchorSegment.empty())
-        anchorSegments.push_back(anchorSegment);
-
-    // other long segments attached to anchor root
-    extractOtherChains(anchor_chain_root, anchorSegments);
 }
 
 void ED::JoinAnchorPointsUsingSortedAnchors()
@@ -582,30 +535,26 @@ void ED::JoinAnchorPointsUsingSortedAnchors()
         if (edgeImgPointer[anchorPixelOffset] != ANCHOR_PIXEL)
             continue;
 
-        int total_pixels_in_anchor_chain = 0; // Count total pixels in the anchor chain and its children
-
         Chain *anchor_chain_root = new Chain();
         // We initialize two distinct nodes to start anchor chain exploration in order to avoid duplicate pixels from the start.
         // This is not done in the original implementation where we set the anchor point two times
         if (gradOrientationImgPointer[anchorPixelOffset] == EDGE_VERTICAL)
         {
             process_stack.push(StackNode(anchorPixelOffset, DOWN, anchor_chain_root));
-            process_stack.push(StackNode(anchorPixelOffset - image_width, UP, anchor_chain_root));
+            process_stack.push(StackNode(anchorPixelOffset, UP, anchor_chain_root));
         }
         else
         {
             process_stack.push(StackNode(anchorPixelOffset, RIGHT, anchor_chain_root));
-            process_stack.push(StackNode(anchorPixelOffset - 1, LEFT, anchor_chain_root));
+            process_stack.push(StackNode(anchorPixelOffset, LEFT, anchor_chain_root));
         }
+
+        int total_pixels_in_anchor_chain = -1; // Count total pixels in the anchor chain and its children. Start at one for the duplicate anchor.
 
         while (!process_stack.empty())
         {
             StackNode currentNode = process_stack.top();
             process_stack.pop();
-
-            // processed stack pixel are in two chains in opposite directions, we track duplicates
-            if (edgeImgPointer[currentNode.offset] != EDGE_PIXEL)
-                total_pixels_in_anchor_chain--;
 
             Chain *new_process_stack_chain = new Chain(currentNode.node_direction, currentNode.parent_chain);
             setChildToChain(new_process_stack_chain->parent_chain, new_process_stack_chain);
@@ -622,7 +571,7 @@ void ED::JoinAnchorPointsUsingSortedAnchors()
             anchor_chain_root->second_childChain->pruneToLongestChain();
             // Create a segment corresponding to this anchor chain
             std::vector<std::vector<Point>> anchorSegments;
-            extractSegmentsFromChain(anchor_chain_root, anchorSegments);
+            extractChainsRecur(anchor_chain_root, anchorSegments);
             segmentPoints.insert(segmentPoints.end(), anchorSegments.begin(), anchorSegments.end());
         }
 
@@ -632,10 +581,10 @@ void ED::JoinAnchorPointsUsingSortedAnchors()
 }
 
 // Clean pixel perpendicular to edge direction
-void ED::cleanUpSurroundingAnchorPixels(StackNode &current_node)
+void ED::cleanUpSurroundingAnchorPixels(const StackNode &current_node)
 {
     int offset = current_node.offset;
-    int offset_diff = (current_node.node_direction == LEFT || current_node.node_direction == RIGHT) ? image_width : 1;
+    int offset_diff = gradOrientationImgPointer[offset] == EDGE_HORIZONTAL ? image_width : 1;
 
     // Left/up neighbor
     if (edgeImgPointer[offset - offset_diff] == ANCHOR_PIXEL)
@@ -646,7 +595,7 @@ void ED::cleanUpSurroundingAnchorPixels(StackNode &current_node)
 }
 
 // Get next pixel in the chain based on current node direction and gradient values
-StackNode ED::getNextChainPixel(StackNode &current_node)
+StackNode ED::getNextChainPixel(const StackNode &current_node)
 {
     const int offset = current_node.offset;
     const Direction dir = current_node.node_direction;
@@ -685,7 +634,6 @@ StackNode ED::getNextChainPixel(StackNode &current_node)
 
 void ED::exploreChain(StackNode &current_node, Chain *current_chain, int &total_pixels_in_anchor_chain)
 {
-
     GradOrientation chain_orientation = current_chain->direction == LEFT || current_chain->direction == RIGHT ? EDGE_HORIZONTAL : EDGE_VERTICAL;
     // Explore until we find change direction or we hit an edge pixel or the gradient is below threshold
     while (gradOrientationImgPointer[current_node.offset] == chain_orientation)
@@ -715,18 +663,22 @@ void ED::exploreChain(StackNode &current_node, Chain *current_chain, int &total_
     {
         // Add UP and DOWN for horizontal chains if the pixels are valid
         // The border pixels were set to a low gradient threshold, so we do not need to check for out of bounds access
-        if (edgeImgPointer[current_node.offset + image_width] == EDGE_PIXEL || gradImgPointer[current_node.offset + image_width] < gradThresh)
-            process_stack.push(StackNode(current_node.offset, DOWN, current_chain));
-        if (edgeImgPointer[current_node.offset - image_width] == EDGE_PIXEL || gradImgPointer[current_node.offset - image_width] < gradThresh)
-            process_stack.push(StackNode(current_node.offset, UP, current_chain));
+        StackNode up_next_node = getNextChainPixel(StackNode(current_node.offset, UP, current_chain));
+        StackNode down_next_node = getNextChainPixel(StackNode(current_node.offset, DOWN, current_chain));
+        if (edgeImgPointer[down_next_node.offset] != EDGE_PIXEL && gradImgPointer[down_next_node.offset] >= gradThresh)
+            process_stack.push(down_next_node);
+        if (edgeImgPointer[up_next_node.offset] != EDGE_PIXEL && gradImgPointer[up_next_node.offset] >= gradThresh)
+            process_stack.push(up_next_node);
     }
     else
     {
+        StackNode left_next_node = getNextChainPixel(StackNode(current_node.offset, LEFT, current_chain));
+        StackNode right_next_node = getNextChainPixel(StackNode(current_node.offset, RIGHT, current_chain));
         // Add LEFT and RIGHT for vertical chains
-        if (edgeImgPointer[current_node.offset + 1] == EDGE_PIXEL || gradImgPointer[current_node.offset + 1] < gradThresh)
-            process_stack.push(StackNode(current_node.offset, RIGHT, current_chain));
-        if (edgeImgPointer[current_node.offset - 1] == EDGE_PIXEL || gradImgPointer[current_node.offset - 1] < gradThresh)
-            process_stack.push(StackNode(current_node.offset, LEFT, current_chain));
+        if (edgeImgPointer[left_next_node.offset] != EDGE_PIXEL && gradImgPointer[left_next_node.offset] >= gradThresh)
+            process_stack.push(left_next_node);
+        if (edgeImgPointer[right_next_node.offset] != EDGE_PIXEL && gradImgPointer[right_next_node.offset] >= gradThresh)
+            process_stack.push(right_next_node);
     }
 }
 

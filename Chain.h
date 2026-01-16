@@ -26,7 +26,6 @@ struct Chain
     Chain *const parent_chain;             // Pointer to parent chain (never changes after init)
     Chain *first_childChain;               // Pointer to left/up child chain
     bool is_first_childChain_longest_path; // Flag to indicate if this is the longest path use first child
-    bool is_extracted = false;             // Flag to indicate if this chain has been extracted into a segment
     Chain *second_childChain;              // Pointer to right/down child chain
     const Direction direction;             // Direction of this chain (never changes after init)
 

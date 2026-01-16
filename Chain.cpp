@@ -48,9 +48,6 @@ std::pair<int, std::vector<Chain *>> Chain::getAllChains(bool only_longest_path)
 
 void Chain::appendAllChains(std::vector<Chain *> &allChains, int &total_length, bool only_longest_path)
 {
-    if (only_longest_path && this->is_extracted)
-        return;
-
     allChains.push_back(this);
     total_length += pixels.size();
     if (first_childChain && (!only_longest_path || is_first_childChain_longest_path))
