@@ -581,11 +581,10 @@ void ED::JoinAnchorPointsUsingSortedAnchors()
 }
 
 // Clean pixel perpendicular to edge direction
-void ED::cleanUpSurroundingAnchorPixels(const StackNode &current_node, bool clear_perpendicular)
+void ED::cleanUpSurroundingAnchorPixels(const StackNode &current_node)
 {
     int offset = current_node.offset;
-    int offset_diff = (current_node.node_direction == LEFT || current_node.node_direction == RIGHT) ? image_width : 1;
-    int perpendicular_offset_diff = (current_node.node_direction == LEFT || current_node.node_direction == RIGHT) ? 1 : image_width;
+    int offset_diff = gradOrientationImgPointer[offset] == EDGE_HORIZONTAL ? image_width : 1;
 
     // Left/up neighbor
     if (edgeImgPointer[offset - offset_diff] == ANCHOR_PIXEL)
@@ -593,16 +592,6 @@ void ED::cleanUpSurroundingAnchorPixels(const StackNode &current_node, bool clea
     // Right/down neighbor
     if (edgeImgPointer[offset + offset_diff] == ANCHOR_PIXEL)
         edgeImgPointer[offset + offset_diff] = 0;
-
-    if (clear_perpendicular)
-    {
-        // Left/up neighbor
-        if (edgeImgPointer[offset - perpendicular_offset_diff] == ANCHOR_PIXEL)
-            edgeImgPointer[offset - perpendicular_offset_diff] = 0;
-        // Right/down neighbor
-        if (edgeImgPointer[offset + perpendicular_offset_diff] == ANCHOR_PIXEL)
-            edgeImgPointer[offset + perpendicular_offset_diff] = 0;
-    }
 }
 
 // Get next pixel in the chain based on current node direction and gradient values
@@ -666,7 +655,7 @@ void ED::exploreChain(StackNode &current_node, Chain *current_chain, int &total_
     current_chain->pixels.push_back(current_node.offset);
     total_pixels_in_anchor_chain++;
     edgeImgPointer[current_node.offset] = EDGE_PIXEL;
-    cleanUpSurroundingAnchorPixels(current_node, true);
+    cleanUpSurroundingAnchorPixels(current_node);
 
     // We add new nodes to the process stack in perpendicular directions to the edge with reference to this chain as a parent
     // This is different from the original implementation where the above node is the starting of the perpendicular sub-chains
