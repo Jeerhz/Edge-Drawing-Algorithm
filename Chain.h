@@ -1,8 +1,9 @@
-#pragma once
-#include <opencv2/opencv.hpp>
+#ifndef CHAIN_H
+#define CHAIN_H
+
+#include "image.h"
 #include <vector>
 #include <stack>
-#include <queue>
 
 enum Direction
 {
@@ -13,54 +14,30 @@ enum Direction
     UNDEFINED = -1
 };
 
-enum GradOrientation
-{
-    EDGE_VERTICAL = 0,
-    EDGE_HORIZONTAL = 1,
-    EDGE_UNDEFINED = -1
-};
-
 struct Chain
 {
-    std::vector<int> pixels;               // Pixels in this chain segment, the value corresponds to the offset
-    Chain *const parent_chain;             // Pointer to parent chain (never changes after init)
-    Chain *first_childChain;               // Pointer to left/up child chain
-    bool is_first_childChain_longest_path; // Flag to indicate if this is the longest path use first child
-    bool is_extracted = false;             // Flag to indicate if this chain has been extracted into a segment
-    Chain *second_childChain;              // Pointer to right/down child chain
-    const Direction direction;             // Direction of this chain (never changes after init)
+    std::vector<Point> pts;
+    Chain* child[2];
+    int len;
+    int path;
+    const Direction dir;
 
     Chain();
-    Chain(Direction _direction, Chain *_parent_chain);
+    Chain(Direction direction, Chain* parent);
     ~Chain();
 
-    int pruneToLongestChain();
-
-    int getTotalLength(bool only_longest_path = false); // Compute the total length of this chain and its children
-
-    std::pair<int, std::vector<Chain *>> getAllChains(bool only_longest_path = false);
-    void appendAllChains(std::vector<Chain *> &allChains, int &total_length, bool only_longest_path = false); // helper to pass
+    int length();
+    void pruneLongestPath(std::stack<Chain*>& orphans);
 };
 
 class StackNode
 {
 public:
-    int offset;
-    Chain *parent_chain;
-    Direction node_direction;         // Direction of exploration
-    GradOrientation grad_orientation; // Gradient orientation at this node
+    Point pos;
+    Direction dir;         // Direction of exploration
+    Chain* parent;
 
-    StackNode(int offset, Direction direction, Chain *parent_chain);
-
-private:
-    int image_width;
+    StackNode(Point p, Direction d, Chain* par): pos(p), dir(d), parent(par) {}
 };
 
-// https://stackoverflow.com/questions/40201711/how-can-i-clear-a-stack-in-c-efficiently
-struct ProcessStack : std::stack<StackNode>
-{
-    ProcessStack() : std::stack<StackNode>() {}
-
-    // clears the underlying stack
-    void clear();
-};
+#endif
