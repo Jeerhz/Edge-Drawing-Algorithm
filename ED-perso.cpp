@@ -77,6 +77,10 @@ Point* ED::sortedAnchors(int& n) const
     // Build histogram of G values
     int min=(int)std::floor(minGrad);
     int nbins = (int)std::round(*std::max_element(G.begin(), G.end()))-min+1;
+    if(nbins <= 0) {
+        n=0;
+        return 0;
+    }
     int* H = new int[nbins];
     std::fill_n(H, nbins, 0);
     for(Point p={1,1}; p.y+1<S.h; p.y++)
