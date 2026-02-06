@@ -56,69 +56,126 @@ double EDPF::NFA(double prob, int len)
     return nfa;
 }
 
+// void EDPF::testSegmentPiece(int segment_idx, int start_idx, int end_idx)
+// {
+//     int chainLen = end_idx - start_idx + 1;
+//     if (chainLen < minPathLen)
+//         return;
+
+//     // First find the min. gradient along the segment
+//     int minGrad = 1 << 30; // 1 << 30 computes 1 * 2^30 = 1073741824
+//     int minGradIndex = start_idx;
+//     for (int k = start_idx; k <= end_idx; k++)
+//     {
+//         int point_row = segmentPoints[segment_idx][k].y;
+//         int point_col = segmentPoints[segment_idx][k].x;
+//         if (gradImgPointer[point_row * image_width + point_col] < minGrad)
+//         {
+//             minGrad = gradImgPointer[point_row * image_width + point_col];
+//             minGradIndex = k;
+//         }
+//     } // end-for
+
+//     // Compute nfa
+//     double prob = gradient_cdf[minGrad];
+//     double nfa = NFA(1 - prob, (int)chainLen);
+
+//     if (nfa <= EPSILON)
+//     {
+//         for (int k = start_idx; k <= end_idx; k++)
+//         {
+//             int point_row = segmentPoints[segment_idx][k].y;
+//             int point_col = segmentPoints[segment_idx][k].x;
+//             edgeImgPointer[point_row * image_width + point_col] = 255;
+//         }
+
+//         return;
+//     }
+
+//     // We divide at the point where the gradient is the minimum starting from both ends
+//     int minGradIndexFromEnd = minGradIndex - 1;
+//     while (minGradIndexFromEnd > start_idx)
+//     {
+//         int point_row = segmentPoints[segment_idx][minGradIndexFromEnd].y;
+//         int point_col = segmentPoints[segment_idx][minGradIndexFromEnd].x;
+
+//         if (gradImgPointer[point_row * image_width + point_col] <= minGrad)
+//             minGradIndexFromEnd--;
+//         else
+//             break;
+//     } // end-while
+
+//     int minGradIndexFromStart = minGradIndex + 1;
+//     while (minGradIndexFromStart < end_idx)
+//     {
+//         int point_row = segmentPoints[segment_idx][minGradIndexFromStart].y;
+//         int point_col = segmentPoints[segment_idx][minGradIndexFromStart].x;
+
+//         if (gradImgPointer[point_row * image_width + point_col] <= minGrad)
+//             minGradIndexFromStart++;
+//         else
+//             break;
+//     }
+
+//     testSegmentPiece(segment_idx, start_idx, minGradIndexFromEnd);
+//     testSegmentPiece(segment_idx, minGradIndexFromStart, end_idx);
+// }
+
 void EDPF::testSegmentPiece(int segment_idx, int start_idx, int end_idx)
 {
     int chainLen = end_idx - start_idx + 1;
     if (chainLen < minPathLen)
         return;
 
-    // First find the min. gradient along the segment
-    int minGrad = 1 << 30; // 1 << 30 computes 1 * 2^30 = 1073741824
-    int minGradIndex = start_idx;
-    for (int k = start_idx; k <= end_idx; k++)
+    // Try subsegments of decreasing size starting from chainLen - 1
+    for (int subSegLen = chainLen - 1; subSegLen >= minPathLen; subSegLen--)
     {
-        int point_row = segmentPoints[segment_idx][k].y;
-        int point_col = segmentPoints[segment_idx][k].x;
-        if (gradImgPointer[point_row * image_width + point_col] < minGrad)
+        // Test all possible subsegments of length subSegLen
+        for (int subStart = start_idx; subStart + subSegLen - 1 <= end_idx; subStart++)
         {
-            minGrad = gradImgPointer[point_row * image_width + point_col];
-            minGradIndex = k;
+            int subEnd = subStart + subSegLen - 1;
+            
+            // Find the min gradient along this subsegment
+            int minGrad = 1 << 30;
+            int minGradIndex = subStart;
+            for (int k = subStart; k <= subEnd; k++)
+            {
+                int point_row = segmentPoints[segment_idx][k].y;
+                int point_col = segmentPoints[segment_idx][k].x;
+                if (gradImgPointer[point_row * image_width + point_col] < minGrad)
+                {
+                    minGrad = gradImgPointer[point_row * image_width + point_col];
+                    minGradIndex = k;
+                }
+            }
+
+            // Compute nfa
+            double prob = gradient_cdf[minGrad];
+            double nfa = NFA(1 - prob, subSegLen);
+
+            if (nfa <= EPSILON)
+            {
+                // Mark this subsegment as an edge
+                for (int k = subStart; k <= subEnd; k++)
+                {
+                    int point_row = segmentPoints[segment_idx][k].y;
+                    int point_col = segmentPoints[segment_idx][k].x;
+                    edgeImgPointer[point_row * image_width + point_col] = 255;
+                }
+                
+                // Recursively test the remaining pieces
+                if (subStart > start_idx)
+                    testSegmentPiece(segment_idx, start_idx, subStart - 1);
+                if (subEnd < end_idx)
+                    testSegmentPiece(segment_idx, subEnd + 1, end_idx);
+                
+                return; // Found a valid subsegment, exit
+            }
         }
-    } // end-for
-
-    // Compute nfa
-    double prob = gradient_cdf[minGrad];
-    double nfa = NFA(1 - prob, (int)chainLen);
-
-    if (nfa <= EPSILON)
-    {
-        for (int k = start_idx; k <= end_idx; k++)
-        {
-            int point_row = segmentPoints[segment_idx][k].y;
-            int point_col = segmentPoints[segment_idx][k].x;
-            edgeImgPointer[point_row * image_width + point_col] = 255;
-        }
-
-        return;
     }
-
-    // We divide at the point where the gradient is the minimum starting from both ends
-    int minGradIndexFromEnd = minGradIndex - 1;
-    while (minGradIndexFromEnd > start_idx)
-    {
-        int point_row = segmentPoints[segment_idx][minGradIndexFromEnd].y;
-        int point_col = segmentPoints[segment_idx][minGradIndexFromEnd].x;
-
-        if (gradImgPointer[point_row * image_width + point_col] <= minGrad)
-            minGradIndexFromEnd--;
-        else
-            break;
-    } // end-while
-
-    int minGradIndexFromStart = minGradIndex + 1;
-    while (minGradIndexFromStart < end_idx)
-    {
-        int point_row = segmentPoints[segment_idx][minGradIndexFromStart].y;
-        int point_col = segmentPoints[segment_idx][minGradIndexFromStart].x;
-
-        if (gradImgPointer[point_row * image_width + point_col] <= minGrad)
-            minGradIndexFromStart++;
-        else
-            break;
-    }
-
-    testSegmentPiece(segment_idx, start_idx, minGradIndexFromEnd);
-    testSegmentPiece(segment_idx, minGradIndexFromStart, end_idx);
+    
+    // No valid subsegment found for any size >= minPathLen
+    // The segment is discarded (no edges marked)
 }
 
 void EDPF::validateEdgeSegments()
