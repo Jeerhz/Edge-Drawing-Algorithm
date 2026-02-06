@@ -121,6 +121,7 @@ double EDPF::NFA(double prob, int len)
 //     testSegmentPiece(segment_idx, minGradIndexFromStart, end_idx);
 // }
 
+// Get the longest segment piece that has a valid NFA
 void EDPF::testSegmentPiece(int segment_idx, int start_idx, int end_idx)
 {
     int chainLen = end_idx - start_idx + 1;
@@ -177,6 +178,71 @@ void EDPF::testSegmentPiece(int segment_idx, int start_idx, int end_idx)
     // No valid subsegment found for any size >= minPathLen
     // The segment is discarded (no edges marked)
 }
+
+// // Find the subset that minimizes the NFA (very slow)
+// void EDPF::testSegmentPiece(int segment_idx, int start_idx, int end_idx)
+// {
+//     int chainLen = end_idx - start_idx + 1;
+//     if (chainLen < minPathLen)
+//         return;
+
+//     // Find the subsegment with minimum NFA
+//     double bestNFA = 1e30;
+//     int bestStart = start_idx;
+//     int bestEnd = end_idx;
+    
+//     // Test all possible subsegments of all lengths >= minPathLen
+//     for (int subSegLen = minPathLen; subSegLen <= chainLen; subSegLen++)
+//     {
+//         for (int subStart = start_idx; subStart + subSegLen - 1 <= end_idx; subStart++)
+//         {
+//             int subEnd = subStart + subSegLen - 1;
+            
+//             // Find the min gradient along this subsegment
+//             int minGrad = 1 << 30;
+//             for (int k = subStart; k <= subEnd; k++)
+//             {
+//                 int point_row = segmentPoints[segment_idx][k].y;
+//                 int point_col = segmentPoints[segment_idx][k].x;
+//                 if (gradImgPointer[point_row * image_width + point_col] < minGrad)
+//                 {
+//                     minGrad = gradImgPointer[point_row * image_width + point_col];
+//                 }
+//             }
+
+//             // Compute nfa
+//             double prob = gradient_cdf[minGrad];
+//             double nfa = NFA(1 - prob, subSegLen);
+
+//             if (nfa < bestNFA)
+//             {
+//                 bestNFA = nfa;
+//                 bestStart = subStart;
+//                 bestEnd = subEnd;
+//             }
+//         }
+//     }
+    
+//     // Check if the best subsegment is valid
+//     if (bestNFA <= EPSILON)
+//     {
+//         // Mark this subsegment as an edge
+//         for (int k = bestStart; k <= bestEnd; k++)
+//         {
+//             int point_row = segmentPoints[segment_idx][k].y;
+//             int point_col = segmentPoints[segment_idx][k].x;
+//             edgeImgPointer[point_row * image_width + point_col] = 255;
+//         }
+        
+//         // Recursively test the remaining pieces
+//         if (bestStart > start_idx)
+//             testSegmentPiece(segment_idx, start_idx, bestStart - 1);
+//         if (bestEnd < end_idx)
+//             testSegmentPiece(segment_idx, bestEnd + 1, end_idx);
+//     }
+    
+//     // If bestNFA > EPSILON, the entire segment is discarded
+// }
 
 void EDPF::validateEdgeSegments()
 {
