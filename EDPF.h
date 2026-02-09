@@ -17,6 +17,8 @@ private:
     void computeGradientCDF();
     void extractValidatedEdgeSegments();
     void testSegmentPiece(int segment_idx, int start_idx, int end_idx);
+    void testSegmentPieceSimple(int segment_idx); // Simple variant of the segment testing
     void extractNewSegments();
     double NFA(double prob, int len);
+    double NFASimple(double prob, int len); // Simple variant of the segment testing
 };
