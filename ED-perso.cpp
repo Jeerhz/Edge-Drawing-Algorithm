@@ -72,33 +72,41 @@ void ED::computeAnchors(float anchorThresh)
         }
 }
 
-Point* ED::sortedAnchors(int& n) const
+/// Build histogram of G values for anchor points, return number of beans.
+int* ED::cumulHistoGradAnchors(int& nbins) const
 {
-    // Build histogram of G values
-    int min=(int)std::floor(minGrad);
-    int nbins = (int)std::round(*std::max_element(G.begin(), G.end()))-min+1;
-    if(nbins <= 0) {
-        n=0;
-        return 0;
-    }
+    nbins = (int)std::round(*std::max_element(G.begin(), G.end()))+1;
     int* H = new int[nbins];
     std::fill_n(H, nbins, 0);
     for(Point p={1,1}; p.y+1<S.h; p.y++)
         for(p.x=1; p.x+1<S.w; p.x++)
             if(S(p) == ANCHOR)
-                ++H[(int)std::round(G(p))-min];
+                ++H[(int)std::round(G(p))];
     // Cumulate histogram
     for(int i=1; i<nbins; i++)
         H[i] += H[i-1];
-    n = H[nbins-1];
+    return H;
+}
+
+Point* ED::sortedAnchors(int& n) const
+{
+    int nbins;
+    int* H = cumulHistoGradAnchors(nbins);
+    int min = std::min(1,(int)std::floor(minGrad));
+    if(min>=nbins) {
+        delete [] H;
+        n = 0;
+        return 0;
+    }
 
     // Sort
+    n = H[nbins-1]-H[min-1]; min = H[min-1];
     Point* anchors = new Point[n];
     for(Point p={1,1}; p.y+1<S.h; p.y++)
         for(p.x=1; p.x+1<S.w; p.x++)
             if(S(p) == ANCHOR) {
-                int i = --H[(int)std::round(G(p))-min];
-                anchors[i] = p;
+                int i = --H[(int)std::round(G(p))];
+                anchors[i-min] = p;
             }
     delete [] H;
     return anchors;

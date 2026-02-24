@@ -23,6 +23,7 @@ protected:
 
 private:
     void computeAnchors(float anchorThresh);
+    int* cumulHistoGradAnchors(int& nbins) const;
     Point* sortedAnchors(int& n) const;
     void joinAnchors();
     void exploreChain(StackNode node, Chain* chain, std::stack<StackNode>& S);
