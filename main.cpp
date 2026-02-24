@@ -68,6 +68,14 @@ int main(int argc, char **argv)
         std::cerr << "Usage: "<<argv[0] << " [options] in.png out.png\n" << cmd;
         return 1;
     }
+    if(gradMin < 1.0) {
+        std::cerr << "The grad-min parameter must be 1 or more" <<std::endl;
+        return 1;
+    }
+    if(sigma < 0) {
+        std::cerr << "The sigma parameter must be 0 or more" <<std::endl;
+        return 1;
+    }
 
     float* im; size_t w, h, c;
     im = io_png_read_f32(argv[1], &w, &h, &c);
