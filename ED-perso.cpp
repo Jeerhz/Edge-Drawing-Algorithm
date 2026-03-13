@@ -74,46 +74,40 @@ void ED::computeAnchors(float anchorThresh) {
 }
 
 /// Build histogram of G values for anchor points, return number of beans.
-int* ED::cumulHistoGradAnchors(int& nbins) const {
-    nbins = (int)std::round(*std::max_element(G.begin(), G.end()))+1;
-    int* H = new int[nbins];
-    std::fill_n(H, nbins, 0);
+std::vector<int> ED::cumulHistoGradAnchors() const {
+    int n = (int)std::round(*std::max_element(G.begin(), G.end()))+1;
+    std::vector<int> H(n, 0);
     for(Point p={1,1}; p.y+1<S.h; p.y++)
         for(p.x=1; p.x+1<S.w; p.x++)
             if(S(p) == ANCHOR)
                 ++H[(int)std::round(G(p))];
-    std::partial_sum(H, H+nbins, H);
+    std::partial_sum(H.begin(), H.end(), H.begin());
     return H;
 }
 
-Point* ED::sortedAnchors(int& n) const {
-    int nbins;
-    int* H = cumulHistoGradAnchors(nbins);
-    int min = std::min(1,(int)std::floor(minGrad));
-    if(min>=nbins) {
-        delete [] H;
-        n = 0;
-        return 0;
-    }
+std::vector<Point> ED::sortedAnchors() const {
+    std::vector<int> H = cumulHistoGradAnchors();
+    std::vector<Point> anchors;
+    if(H.empty())
+        return anchors;
 
     // Sort
-    n = H[nbins-1]-H[min-1]; min = H[min-1];
-    Point* anchors = new Point[n];
+    const int n = H.back();
+    anchors.resize(n);
     for(Point p={1,1}; p.y+1<S.h; p.y++)
         for(p.x=1; p.x+1<S.w; p.x++)
             if(S(p) == ANCHOR) {
                 int i = --H[(int)std::round(G(p))];
-                anchors[i-min] = p;
+                anchors[i] = p;
             }
-    delete [] H;
     return anchors;
 }
 
 void ED::joinAnchors() {
-    int n;
-    Point* anchors = sortedAnchors(n);
-    while(--n >= 0) {
-        Point p=anchors[n];
+    std::vector<Point> anchors = sortedAnchors();
+    std::vector<Point>::const_reverse_iterator it, end=anchors.rend();
+    for(it=anchors.rbegin(); it!=end; ++it) {
+        const Point& p = *it;
         if(S(p)!=ANCHOR) continue;
         Chain* root = new Chain;
         buildChainTree(root, p);
@@ -129,7 +123,6 @@ void ED::joinAnchors() {
         }
         delete root;
     }
-    delete [] anchors;
 }
 
 // Get next pixel in the chain based on current node direction and gradient values
@@ -243,38 +236,33 @@ void ED::validateNFA(float epsNFA) {
     for(Point p={1,1}; p.y+1<S.h; p.y++)
         for(p.x=1; p.x+1<S.w; p.x++)
             S(p) = G(p)<minGrad? 0: ANCHOR;
-    int nbins;
-    int* H = cumulHistoGradAnchors(nbins);
-    int min = std::min(1,(int)std::floor(minGrad));
-    if(min>=nbins) {
+    std::vector<int> H = cumulHistoGradAnchors();
+    if(H.empty()) {
         edges.clear();
-        delete [] H;
         return;
     }
 
-    int n = H[nbins-1]-H[min-1];
-    float* lProba = new float[nbins];
-    float v = std::log10(H[nbins-1]);
-    for(int i=1; i<nbins; i++)
-        lProba[i] = log10(H[nbins-1]-H[i-1])-v;
-    delete [] H;
+    std::vector<float> lProba(H.size(), 0);
+    const int n = H.back();
+    const float v = std::log10(n);
+    for(size_t i=1; i<H.size(); i++)
+        lProba[i] = log10(n-H[i-1])-v;
 
     int nTests = 0;
-    std::vector<std::vector<Point>>::const_iterator it=edges.begin(), end;
-    for(end=edges.end(); it!=end; ++it)
+    std::vector<std::vector<Point>>::const_iterator it, end=edges.end();
+    for(it=edges.begin(); it!=end; ++it)
         nTests += it->size()*(it->size()+1)/2;
     const float lTests = log10(nTests);
     const float lEpsNFA = log10(epsNFA);
-    
+
     std::vector<std::vector<Point>> valid;
     for(it=edges.begin(); it!=end; ++it)
-        validateEdge(*it, lProba, nbins, lTests, lEpsNFA, valid);
+        validateEdge(*it, lProba, lTests, lEpsNFA, valid);
     std::swap(edges, valid);
-    delete [] lProba;
 }
 
 /// Find_root of Union/Find algorithm.
-int root(int* zpar, int i) {
+int root(std::vector<int>& zpar, int i) {
     if(zpar[i]==i)
         return i;
     return (zpar[i] = root(zpar, zpar[i]));
@@ -342,17 +330,16 @@ void extract_valid_segments(const std::vector<Point>& e,
     }
 }
 
-void ED::validateEdge(const std::vector<Point>& e, float* lProba, int nbins,
+void ED::validateEdge(const std::vector<Point>& e,
+                      const std::vector<float>& lProba,
                       float lTests, float lEpsNFA,
                       std::vector<std::vector<Point>>& valid) const {
     size_t n=e.size();
-    int* idx = new int[n];
-    std::iota(idx, idx+n, 0);
-    std::sort(idx, idx+n, CompareGradEdge(G,e));
-    int* par = new int[n];
-    int* zpar = new int[n];
-    std::fill(par, par+n, -1);
-    std::fill(zpar, zpar+n, -1);
+    std::vector<int> idx(n);
+    std::iota(idx.begin(), idx.end(), 0);
+    std::sort(idx.begin(), idx.end(), CompareGradEdge(G,e));
+    std::vector<int> par(n,-1);
+    std::vector<int> zpar(n,-1);
     // Build tree
     for(int i=(int)n-1; i>=0; i--) {
         int j=idx[i];
@@ -373,8 +360,6 @@ void ED::validateEdge(const std::vector<Point>& e, float* lProba, int nbins,
             par[j] = par[k];
     }
     size_t root = idx[0];
-    delete [] idx;
-    delete [] zpar;
 
     std::vector<Interval*> tree(n, 0);
     for(size_t i=0; i<n; i++) { // Build tree nodes
@@ -390,7 +375,6 @@ void ED::validateEdge(const std::vector<Point>& e, float* lProba, int nbins,
                 tree[par[i]]->add(i);
         }
     tree[root]->fillBounds();
-    delete [] par;
     for(size_t i=0; i<n; i++) // Compute log NFA
         if(tree[i])
             tree[i]->v = lTests +

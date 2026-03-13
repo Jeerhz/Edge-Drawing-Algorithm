@@ -24,8 +24,8 @@ protected:
 
 private:
     void computeAnchors(float anchorThresh);
-    int* cumulHistoGradAnchors(int& nbins) const;
-    Point* sortedAnchors(int& n) const;
+    std::vector<int> cumulHistoGradAnchors() const;
+    std::vector<Point> sortedAnchors() const;
     void joinAnchors();
     void exploreChain(StackNode node, Chain* chain, std::stack<StackNode>& S);
     bool nextPixelChain(StackNode& node);
@@ -33,8 +33,9 @@ private:
     void extractEdgesFromTree(Chain* root);
     void buildRootEdge(Chain* root);
     void validateNFA(float epsNFA);
-    void validateEdge(const std::vector<Point>& e, float* lProba, int nbins,
-                      float lTests, float epsNFA,
+    void validateEdge(const std::vector<Point>& e,
+                      const std::vector<float>& lProba,
+                      float lTests, float lEpsNFA,
                       std::vector<std::vector<Point>>& valid) const;
 };
 
