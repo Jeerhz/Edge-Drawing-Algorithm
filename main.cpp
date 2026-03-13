@@ -1,4 +1,13 @@
-#include "ED-perso.h"
+// SPDX-License-Identifier: MPL-2.0
+/**
+ * @file main.cpp
+ * @brief edge drawing program
+ * @author Adle Ben Salem
+ *         Pascal Monasse <pascal.monasse@enpc.fr>
+ * @date 2025-2026
+ */
+
+#include "ED.h"
 #include "image.h"
 #include "cmdLine.h"
 #include "io_png.h"
@@ -7,10 +16,11 @@
 #include <cstdlib>
 #include <cmath>
 
+/// Compute gradient of image and store in polar.
 void grad(Image<float> I[3], size_t c, Image<float>& G, Image<float>& Theta) {
     G.reset(I[0].w, I[0].h); G.fill(0);
     Theta.reset(I[0].w, I[0].h); Theta.fill(0);
-    if(c==1)
+    if(c==1) // 2x2 scheme, like LSD
         for(int y=0; y+1<G.h; y++)
             for(int x=0; x+1<G.w; x++) {
                 float c1 = I[0](x+1,y+1) - I[0](x,y);
@@ -20,7 +30,7 @@ void grad(Image<float> I[3], size_t c, Image<float>& G, Image<float>& Theta) {
                 if(G(x,y)>0)
                     Theta(x,y) = std::atan2(gy, gx);
             }
-    if(c==3) {
+    if(c==3) { // Di Zenzo color gradient
         const float norm=1/std::sqrt(3);
         for(int y=0; y+1<G.h; y++)
             for(int x=0; x+1<G.w; x++) {
@@ -42,15 +52,13 @@ void grad(Image<float> I[3], size_t c, Image<float>& G, Image<float>& Theta) {
     }
 }
 
-int main(int argc, char **argv)
-{
-    CmdLine cmd;
-
+int main(int argc, char **argv) {
     double gradMin=6, anchorGap=2;
     int lengthMin=10;
     float sigma=1.0f;
     float epsNFA=0;
 
+    CmdLine cmd;
     cmd.add( make_option('g', gradMin, "grad-min")
              .doc("Min gradient") );
     cmd.add( make_option('a', anchorGap, "angchor-gap")
@@ -103,13 +111,11 @@ int main(int argc, char **argv)
     unsigned char* out = new unsigned char[3*w*h];
     std::fill_n(out, 3*w*h, 0);
     const std::vector<std::vector<Point>>& seg = ed.edges;
-    for (size_t i = 0; i < seg.size(); ++i)
-    {
+    for (size_t i = 0; i < seg.size(); ++i) {
         const std::vector<Point>& segi = seg[i];
         typedef unsigned char uchar;
         uchar c[3] = {uchar(rand()%256), uchar(rand()%256), uchar(rand()%256)};
-        for (const Point& p : segi)
-        {
+        for (const Point& p : segi) {
             size_t idx = p.y*w + p.x;
             std::copy_n(c, 3, out+3*idx);
         }

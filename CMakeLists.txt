@@ -28,7 +28,7 @@ set(CMAKE_CXX_STANDARD 11)
 
 add_executable(edgeDrawing
     main.cpp
-    ED-perso.cpp ED-perso.h
+    ED.cpp ED.h
     Chain.cpp Chain.h
     image.cpp image.h
     io_png.c io_png.h

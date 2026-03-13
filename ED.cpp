@@ -1,4 +1,13 @@
-#include "ED-perso.h"
+// SPDX-License-Identifier: MPL-2.0
+/**
+ * @file ED.cpp
+ * @brief edge drawing
+ * @author Adle Ben Salem
+ *         Pascal Monasse <pascal.monasse@enpc.fr>
+ * @date 2025-2026
+ */
+
+#include "ED.h"
 #include "Chain.h"
 #include <stack>
 #include <algorithm>
@@ -7,6 +16,8 @@
 
 const ED::Orientation HORIZONTAL=true;
 const ED::Orientation VERTICAL=false;
+const ED::State ANCHOR=1;
+const ED::State EDGE=2;
 
 inline ED::Orientation orient(Direction d) {
     return (d==LEFT || d== RIGHT)? HORIZONTAL: VERTICAL;
@@ -27,9 +38,7 @@ inline Point neighbor(Point p, Direction d) {
     return q;
 }
 
-const ED::State ANCHOR=1;
-const ED::State EDGE=2;
-
+/// Erase chain-tree in state image \a S.
 void erase_chain(const Chain* c, Image<ED::State>& S) {
     if(! c) return;
     std::vector<Point>::const_iterator i;
@@ -85,6 +94,7 @@ std::vector<int> ED::cumulHistoGradAnchors() const {
     return H;
 }
 
+/// Return anchors ordered by increasing gradient.
 std::vector<Point> ED::sortedAnchors() const {
     std::vector<int> H = cumulHistoGradAnchors();
     std::vector<Point> anchors;
@@ -103,6 +113,7 @@ std::vector<Point> ED::sortedAnchors() const {
     return anchors;
 }
 
+/// Extract edges from anchors.
 void ED::joinAnchors() {
     std::vector<Point> anchors = sortedAnchors();
     std::vector<Point>::const_reverse_iterator it, end=anchors.rend();
@@ -125,7 +136,7 @@ void ED::joinAnchors() {
     }
 }
 
-// Get next pixel in the chain based on current node direction and gradient values
+/// Get next pixel in chain based on node direction and gradient values.
 bool ED::nextPixelChain(StackNode& node) {
     Point q[3];
     q[0] = neighbor(node.pos,node.dir);
@@ -148,13 +159,13 @@ bool ED::nextPixelChain(StackNode& node) {
     return S(node.pos)!=EDGE && bestGrad>=minGrad;
 }
 
+/// Explore edge until finding a changed direction, hitting an edge pixel, or
+/// too low gradient. In the first case, two anchors are appended to \a stack.
 void ED::exploreChain(StackNode node, Chain* chain,
                       std::stack<StackNode>& stack) {
     Orientation ori = orient(chain->dir);
-    // Explore until we find change direction or we hit an edge pixel or the gradient is below threshold
     while (O(node.pos) == ori) {
-        // Remove adjacent anchors
-        for(int i=0; i<2; i++) {
+        for(int i=0; i<2; i++) { // Remove adjacent anchors
             Point p = neighbor(node.pos, dir(!ori,i));
             if(S(p) == ANCHOR)
                 S(p)=0;
@@ -165,7 +176,7 @@ void ED::exploreChain(StackNode node, Chain* chain,
         S(node.pos) = EDGE;
     }
 
-    // We add new nodes to the process stack in perpendicular directions to the edge with reference to this chain as a parent
+    // Add new nodes in perpendicular direction
     stack.emplace(node.pos, dir(!ori,0), chain);
     stack.emplace(node.pos, dir(!ori,1), chain);
 }
@@ -223,9 +234,7 @@ struct CompareGradEdge {
     : G(g), E(e) {}
     bool operator()(int i, int j) const {
         float vi=G(E[i]), vj=G(E[j]);
-        if(vi != vj)
-            return (vi<vj);
-        return i>j; // Equal value pts handled lower to upper index
+        return (vi<vj);
     }
 };
 
@@ -312,6 +321,7 @@ struct Interval {
     }
 };
 
+/// Step 3 of algorithm in ED::validateEdge.
 void extract_valid_segments(const std::vector<Point>& e,
                             Interval* r, float lEpsNFA,
                             std::vector<std::vector<Point>>& valid) {
@@ -330,11 +340,19 @@ void extract_valid_segments(const std::vector<Point>& e,
     }
 }
 
+/// Append to \a valid the maximally contrasted segments of \a e.
+/// \a lProba gives the log10 probability of contrast at least index.
+/// \a lTests is log10 of the number of tests and \a lEpsNFA is log10 of the
+/// upper bound threshold for meaningfulness.
+/// Algo:
+/// 1. Compute the max-tree of gradients on \a e (Berger algorithm).
+/// 2. Find most meaningful segment of tree.
+/// 3. If meaningful, validate and go back to 2 for all disjoint segments.
 void ED::validateEdge(const std::vector<Point>& e,
                       const std::vector<float>& lProba,
                       float lTests, float lEpsNFA,
                       std::vector<std::vector<Point>>& valid) const {
-    size_t n=e.size();
+    const size_t n=e.size();
     std::vector<int> idx(n);
     std::iota(idx.begin(), idx.end(), 0);
     std::sort(idx.begin(), idx.end(), CompareGradEdge(G,e));
@@ -368,7 +386,7 @@ void ED::validateEdge(const std::vector<Point>& e,
             tree[i] = new Interval(i,v);
     }
     for(size_t i=0; i<n; i++)
-        if(i!=root) { // Build hierarchy and fill info
+        if(i!=root) { // Build tree edges and fill info
             if(tree[i])
                 tree[par[i]]->addChild(tree[i]);
             else

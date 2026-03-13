@@ -1,11 +1,19 @@
+// SPDX-License-Identifier: MPL-2.0
+/**
+ * @file ED.h
+ * @brief edge drawing
+ * @author Adle Ben Salem
+ *         Pascal Monasse <pascal.monasse@enpc.fr>
+ * @date 2025-2026
+ */
+
 #ifndef ED_H
 #define ED_H
 
 #include "Chain.h"
 #include "image.h"
 
-class ED
-{
+class ED {
 public:
     ED(const Image<float>& G, const Image<float>& Theta,
        float gradMin=6, float anchorGap=2, int minPathLen=10,
