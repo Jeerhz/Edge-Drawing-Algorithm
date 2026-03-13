@@ -49,6 +49,7 @@ int main(int argc, char **argv)
     double gradMin=6, anchorGap=2;
     int lengthMin=10;
     float sigma=1.0f;
+    float epsNFA=0;
 
     cmd.add( make_option('g', gradMin, "grad-min")
              .doc("Min gradient") );
@@ -58,6 +59,8 @@ int main(int argc, char **argv)
              .doc("Min length of edge segment") );
     cmd.add( make_option('s', sigma, "sigma")
              .doc("Sigma of Gaussian blur") );
+    cmd.add( make_option('e', epsNFA, "epsNFA")
+             .doc("1 or lower, <=0 means no NFA validation") );
     try {
         cmd.process(argc, argv);
     } catch(const std::string& s) {
@@ -95,7 +98,7 @@ int main(int argc, char **argv)
     Image<float> G, Theta;
     grad(channels, c, G, Theta);
     
-    ED ed(G, Theta, gradMin, anchorGap, lengthMin);
+    ED ed(G, Theta, gradMin, anchorGap, lengthMin, epsNFA);
 
     unsigned char* out = new unsigned char[3*w*h];
     std::fill_n(out, 3*w*h, 0);
