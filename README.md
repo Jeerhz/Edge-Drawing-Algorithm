@@ -1,80 +1,51 @@
-# EDLines Study Project
+# edgeDrawing (An implementation of the ED algorithm)
 
-This project compares two **EDLines implementations**:
+Version 0.9, 03/16/2026.
 
-- Custom version in the root folder (`edlines-implementation`)
-- Original EDLib as a **git submodule** in `ED_Lib/`
+Future versions: <https://github.com/pmonasse/Edge-Drawing>
 
-We refactored the Edge Detector and Lines Detector scripts in Cihan Topal and al repository (https://github.com/CihanTopal/ED_Lib) for explanatory and clarity purposes.
-
----
-
-## Structure
-
-```
-.
-├── ED_Lib/         # Original EDLines library
-├── images/         # Test images
-├── results/        # Result of algorithms
-├── CMakeLists.txt  # Build config
-├── Makefile        # Init, build, run
-├── ...             # New cpp project (.cpp and .h files)
-├── test_ED.cpp     # Main test program
-└── README.md
-```
-
----
-
-## Requirements
-
-- **CMake ≥ 3.11**
-- **g++** or **clang** with C++11
-- **OpenCV**
-
----
-
-## Setup
-
-```bash
-git clone https://github.com/<username>/EDLINES-IMPLEMENTATION.git
-cd EDLINES-IMPLEMENTATION
-make init
-```
-
----
+The ED algorithm[^1] is a vectorized edge detector. It extends the Canny edge detector by replacing the hysteresis thresholding with edge tracking along level lines. 
 
 ## Build
+*Requirements:*
 
-```bash
-make build
+  - CMake >. 3,11 <https://cmake.org/download/>
+  - C++ compiler
+  
+*Build instructions:*
+- Unix, MacOS:
+  ```
+  $ cd /path_to_this_file/
+  $ cmake -DCMAKE_BUILD_TYPE:bool=Release -S . -B Build
+  $ cmake --build Build
+  ```
+- Windows with MinGW:
+  ```
+  $ cd /path_to_this_file/
+  $ cmake -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE:bool=Release S . -B Build
+  $ cmake --build Build
+  ```
+
+## Usage
+```
+Build/edgeDrawing [options] in.png out.png
+-g, --grad-min=ARG Min gradient (6)
+-a, --angchor-gap=ARG Min gap of gradient for anchor (2)
+-l, --length-min=ARG Min length of edge segment (10)
+-s, --sigma=ARG Sigma of Gaussian blur (1)
+-e, --epsNFA=ARG 1 or lower, <=0 means no NFA validation (0)
 ```
 
-- Builds custom project in `build/`
-- Builds EDLib submodule in `ED_Lib/build/`
+Typical settings for a contrario validation of edges:
 
----
+- a smaller value of -g could be used (2).
+- a smaller value of -a could be used (0).
+- the NFA treshold -e could be 1.
 
-## Run
-
-Run the original and new versions with:
-
-```bash
-make run IMAGE=<image_filename>
+Example:
 ```
-
-example:
-
-```bash
-make run IMAGE=billiard.jpg
+Build/edgeDrawing data/shapes.png shapes_out.png
 ```
+Compare `shapes_out.png` and reference `data/shapes_out_png`.
 
-Results are saved in `results/`.
-
----
-
-## Clean
-
-```bash
-make clean     # Remove builds and results
-make rebuild   # Clean and build again
-```
+[^1] Original implementation by the authors of ED, Cihan Topal and Cuneyt Akinlar (https://github.com/CihanTopal/ED_Lib)

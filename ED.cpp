@@ -226,7 +226,7 @@ void ED::extractEdgesFromTree(Chain* root) {
     }
 }
 
-/// Fonctor for sorting based on gradient along edge.
+/// Functor for sorting based on gradient along edge.
 struct CompareGradEdge {
     const Image<float>& G;
     const std::vector<Point>& E;
@@ -374,15 +374,15 @@ void ED::validateEdge(const std::vector<Point>& e,
     // Canonize
     for(size_t i=1; i<n; i++) {
         int j=idx[i], k=par[j];
-        if(G(e[par[k]]) == G(e[k]))
+        if(std::round(G(e[par[k]])) == std::round(G(e[k])))
             par[j] = par[k];
     }
     size_t root = idx[0];
 
     std::vector<Interval*> tree(n, 0);
     for(size_t i=0; i<n; i++) { // Build tree nodes
-        float v = G(e[i]);
-        if(i==root || G(e[par[i]])!=v)
+        float v = std::round(G(e[i]));
+        if(i==root || std::round(G(e[par[i]]))!=v)
             tree[i] = new Interval(i,v);
     }
     for(size_t i=0; i<n; i++)
