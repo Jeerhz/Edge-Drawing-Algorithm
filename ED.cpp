@@ -396,7 +396,7 @@ void ED::validateEdge(const std::vector<Point>& e,
     for(size_t i=0; i<n; i++) // Compute log NFA
         if(tree[i])
             tree[i]->v = lTests +
-                         (tree[i]->max-tree[i]->min+1) *
+                         (tree[i]->max-tree[i]->min+1) * 0.5f *
                          lProba[(int)std::round(tree[i]->v)];
     extract_valid_segments(e, tree[root], lEpsNFA, valid);
     delete tree[root];
