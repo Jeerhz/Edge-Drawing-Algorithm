@@ -11,7 +11,7 @@ gap=$2
 length=$3
 sigma=$4
 valid=$5
-valid=${valid/true/-e 1}
+valid=${valid/true/-e 0}
 valid=${valid/false/}
 
 $bin/build/edgeDrawing $valid -g $grad -a $gap -l $length -s $sigma $input_0 edges.png

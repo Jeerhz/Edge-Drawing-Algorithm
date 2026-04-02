@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
     double gradMin=6, anchorGap=2;
     int lengthMin=10;
     float sigma=1.0f;
-    float epsNFA=0;
+    float lEpsNFA=0;
 
     CmdLine cmd;
     cmd.add( make_option('g', gradMin, "grad-min")
@@ -67,8 +67,8 @@ int main(int argc, char **argv) {
              .doc("Min length of edge segment") );
     cmd.add( make_option('s', sigma, "sigma")
              .doc("Sigma of Gaussian blur") );
-    cmd.add( make_option('e', epsNFA, "epsNFA")
-             .doc("1 or lower, <=0 means no NFA validation") );
+    cmd.add( make_option('e', lEpsNFA, "epsNFA")
+             .doc("log10(NFA) for validation, normally 0 or negative") );
     try {
         cmd.process(argc, argv);
     } catch(const std::string& s) {
@@ -76,7 +76,8 @@ int main(int argc, char **argv) {
         return 1;
     }
     if(argc != 3) {
-        std::cerr << "Usage: "<<argv[0] << " [options] in.png out.png\n" << cmd;
+        std::cerr << "Usage: "<<argv[0] << " [options] in.png out.png\n" << cmd
+                  << "No NFA validation if option -e is not used" << std::endl; 
         return 1;
     }
     if(gradMin < 1.0) {
@@ -106,7 +107,9 @@ int main(int argc, char **argv) {
     Image<float> G, Theta;
     grad(channels, c, G, Theta);
     
-    ED ed(G, Theta, gradMin, anchorGap, lengthMin, epsNFA);
+    ED ed(G, Theta, gradMin, anchorGap, lengthMin);
+    if(cmd.used('e'))
+        ed.validateNFA(lEpsNFA);
 
     unsigned char* out = new unsigned char[3*w*h];
     std::fill_n(out, 3*w*h, 0);

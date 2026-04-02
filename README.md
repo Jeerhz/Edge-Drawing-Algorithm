@@ -2,7 +2,7 @@
 
 Version 0.9, 03/16/2026.
 
-Future versions: <https://github.com/pmonasse/Edge-Drawing>
+Future versions: <https://github.com/pmonasse/Edge-Drawing/tree/standalone>
 
 The ED algorithm[^1] is a vectorized edge detector. It extends the Canny edge detector by replacing the hysteresis thresholding with edge tracking along level lines. 
 
@@ -28,19 +28,20 @@ The ED algorithm[^1] is a vectorized edge detector. It extends the Canny edge de
 
 ## Usage
 ```
-Build/edgeDrawing [options] in.png out.png
+Usage: ./build/edgeDrawing [options] in.png out.png
 -g, --grad-min=ARG Min gradient (6)
 -a, --angchor-gap=ARG Min gap of gradient for anchor (2)
 -l, --length-min=ARG Min length of edge segment (10)
 -s, --sigma=ARG Sigma of Gaussian blur (1)
--e, --epsNFA=ARG 1 or lower, <=0 means no NFA validation (0)
+-e, --epsNFA=ARG log10(NFA) for validation, normally 0 or negative (0)
+No NFA validation if option -e is not used
 ```
 
 Typical settings for a contrario validation of edges:
 
 - a smaller value of -g could be used (2).
 - a smaller value of -a could be used (0).
-- the NFA treshold -e could be 1.
+- the NFA threshold -e could be 0.
 
 Example:
 ```
@@ -48,4 +49,4 @@ Build/edgeDrawing data/shapes.png shapes_out.png
 ```
 Compare `shapes_out.png` and reference `data/shapes_out_png`.
 
-[^1] Original implementation by the authors of ED, Cihan Topal and Cuneyt Akinlar (https://github.com/CihanTopal/ED_Lib)
+[^1]: Original implementation by the authors of ED, Cihan Topal and Cuneyt Akinlar (https://github.com/CihanTopal/ED_Lib)

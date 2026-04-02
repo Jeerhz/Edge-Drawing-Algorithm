@@ -50,7 +50,7 @@ void erase_chain(const Chain* c, Image<ED::State>& S) {
 
 /// Constructor. Does all the computation, output in field \c edges.
 ED::ED(const Image<float>& grad, const Image<float>& Theta,
-       float gradMin, float anchorThresh, int minPathLen, float epsNFA)
+       float gradMin, float anchorThresh, int minPathLen)
 : G(grad), O(G.w,G.h), S(G.w,G.h), minGrad(gradMin), minLen(minPathLen) {
     for(int y=0; y<G.h; y++)
         G(0,y) = G(G.w-1,y) = 0;
@@ -63,7 +63,6 @@ ED::ED(const Image<float>& grad, const Image<float>& Theta,
         }
     computeAnchors(anchorThresh);
     joinAnchors();
-    validateNFA(epsNFA);
 }
 
 /// Compute anchor pixels: local max of gradient (with minimal gap and value).
@@ -238,10 +237,9 @@ struct CompareGradEdge {
     }
 };
 
-/// A contrario validation.
-void ED::validateNFA(float epsNFA) {
-    if(epsNFA<=0)
-        return;
+/// A contrario validation. \a lEpsNFA is the log10 of detection threshold.
+/// Its normal value is 0, or negative for more requiring detection.
+void ED::validateNFA(float lEpsNFA) {
     for(Point p={1,1}; p.y+1<S.h; p.y++)
         for(p.x=1; p.x+1<S.w; p.x++)
             S(p) = G(p)<minGrad? 0: ANCHOR;
@@ -262,7 +260,6 @@ void ED::validateNFA(float epsNFA) {
     for(it=edges.begin(); it!=end; ++it)
         nTests += it->size()*(it->size()+1)/2;
     const float lTests = log10(nTests);
-    const float lEpsNFA = log10(epsNFA);
 
     std::vector<std::vector<Point>> valid;
     for(it=edges.begin(); it!=end; ++it)
