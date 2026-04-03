@@ -14,6 +14,12 @@
 #include <numeric>
 #include <cmath>
 
+/// \file
+// The above command is meant to include comment on #define in Doxygen.
+/// Uncomment to validate portions of lines. Otherwise, any valid portion
+/// validates the whole line.
+//#define VALID_SUBLINE
+
 const ED::Orientation HORIZONTAL=true;
 const ED::Orientation VERTICAL=false;
 const ED::State ANCHOR=1;
@@ -325,6 +331,7 @@ void extract_valid_segments(const std::vector<Point>& e,
     Interval* m = r->findMinValue();
     if(m->v > lEpsNFA)
         return;
+#ifdef VALID_SUBLINE
     std::vector<Point> v(e.begin()+m->min, e.begin()+m->max+1);
     valid.push_back(v);
     for(; m->parent; m = m->parent) {
@@ -335,6 +342,9 @@ void extract_valid_segments(const std::vector<Point>& e,
                 extract_valid_segments(e, *it, lEpsNFA, valid);
             }
     }
+#else
+    valid.push_back(e);
+#endif
 }
 
 /// Append to \a valid the maximally contrasted segments of \a e.
@@ -350,6 +360,16 @@ void ED::validateEdge(const std::vector<Point>& e,
                       float lTests, float lEpsNFA,
                       std::vector<std::vector<Point>>& valid) const {
     const size_t n=e.size();
+#ifndef VALID_SUBLINE // shortcut: if whole line is valid, no need for max-tree
+    float min=G(e[0]);
+    for(size_t i=1; i<n; i++)
+        if(min > G(e[i]))
+            min = G(e[i]);
+    if(lTests+n*0.5f*lProba[(int)std::round(min)] <= lEpsNFA) {
+        valid.push_back(e);
+        return;
+    }
+#endif
     std::vector<int> idx(n);
     std::iota(idx.begin(), idx.end(), 0);
     std::sort(idx.begin(), idx.end(), CompareGradEdge(G,e));
