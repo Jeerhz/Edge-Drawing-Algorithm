@@ -325,7 +325,7 @@ void extract_valid_segments(const std::vector<Point>& e,
     Interval* m = r->findMinValue();
     if(m->v > lEpsNFA)
         return;
-    std::vector<Point> v(e.begin()+r->min, e.begin()+r->max+1);
+    std::vector<Point> v(e.begin()+m->min, e.begin()+m->max+1);
     valid.push_back(v);
     for(; m->parent; m = m->parent) {
         std::vector<Interval*>::iterator it, end=m->parent->child.end();
