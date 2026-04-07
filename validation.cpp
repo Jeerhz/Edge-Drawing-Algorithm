@@ -19,58 +19,10 @@ static bool closed(const std::vector<Point>& e) {
     return dx*dy*dx*dy==1;
 }
 
-/// Functor for sorting based on gradient along edge.
-struct CompareGradEdge {
-    const Image<float>& G;
-    const std::vector<Point>& E;
-    CompareGradEdge(const Image<float>& g, const std::vector<Point>& e)
-    : G(g), E(e) {}
-    bool operator()(int i, int j) const {
-        float vi=G(E[i]), vj=G(E[j]);
-        return (vi<vj);
-    }
-};
-
-/// A contrario validation. \a lEpsNFA is the log10 of detection threshold.
-/// Its normal value is 0, or negative for more requiring detection.
-/// @param lEpsNFA log10 of max NFA for validation. 
-/// @param bSubLines Validate only portions of lines.
-void ED::validateNFA(float lEpsNFA, bool bSubLines) {
-    for(Point p={1,1}; p.y+1<S.h; p.y++)
-        for(p.x=1; p.x+1<S.w; p.x++)
-            S(p) = G(p)<minGrad? 0: ANCHOR;
-    std::vector<int> H = cumulHistoGradAnchors();
-    if(H.empty()) {
-        edges.clear();
-        return;
-    }
-
-    std::vector<float> lProba(H.size(), 0);
-    const int n = H.back();
-    const float v = std::log10(n);
-    for(size_t i=1; i<H.size(); i++)
-        lProba[i] = log10(n-H[i-1])-v;
-
-    int nTests = 0;
-    std::vector<std::vector<Point>>::const_iterator it, end=edges.end();
-    for(it=edges.begin(); it!=end; ++it)
-        nTests += it->size()*(it->size()+1)/2;
-    const float lTests = log10(nTests);
-
-    std::vector<std::vector<Point>> valid;
-    for(it=edges.begin(); it!=end; ++it)
-        validateEdge(*it, lProba, lTests, lEpsNFA, bSubLines, valid);
-    std::swap(edges, valid);
-}
-
-/// Find_root of Union/Find algorithm.
-int root(std::vector<int>& zpar, int i) {
-    if(zpar[i]==i)
-        return i;
-    return (zpar[i] = root(zpar, zpar[i]));
-}
-
-/// Max-tree of edge intervals
+/// Max-tree of edge intervals.
+/// Stores bounds \c min and \c max, a value \a v (initially the min gradient
+/// on the interval, later log10 of NFA). If the edge is circular, the interval
+/// may loop and then max < min.
 struct Interval {
     Interval* parent;
     std::vector<Interval*> child;
@@ -128,6 +80,57 @@ Interval* Interval::findMinValue() {
             min = m;
     }
     return min;
+}
+
+/// Functor for sorting based on gradient along edge.
+struct CompareGradEdge {
+    const Image<float>& G;
+    const std::vector<Point>& E;
+    CompareGradEdge(const Image<float>& g, const std::vector<Point>& e)
+    : G(g), E(e) {}
+    bool operator()(int i, int j) const {
+        float vi=G(E[i]), vj=G(E[j]);
+        return (vi<vj);
+    }
+};
+
+/// A contrario validation. \a lEpsNFA is the log10 of detection threshold.
+/// Its normal value is 0, or negative for more requiring detection.
+/// @param lEpsNFA log10 of max NFA for validation. 
+/// @param bSubLines Validate only portions of lines.
+void ED::validateNFA(float lEpsNFA, bool bSubLines) {
+    for(Point p={1,1}; p.y+1<S.h; p.y++)
+        for(p.x=1; p.x+1<S.w; p.x++)
+            S(p) = G(p)<minGrad? 0: ANCHOR;
+    std::vector<int> H = cumulHistoGradAnchors();
+    if(H.empty()) {
+        edges.clear();
+        return;
+    }
+
+    std::vector<float> lProba(H.size(), 0);
+    const int n = H.back();
+    const float v = std::log10(n);
+    for(size_t i=1; i<H.size(); i++)
+        lProba[i] = log10(n-H[i-1])-v;
+
+    int nTests = 0;
+    std::vector<std::vector<Point>>::const_iterator it, end=edges.end();
+    for(it=edges.begin(); it!=end; ++it)
+        nTests += it->size()*(it->size()+1)/2;
+    const float lTests = log10(nTests);
+
+    std::vector<std::vector<Point>> valid;
+    for(it=edges.begin(); it!=end; ++it)
+        validateEdge(*it, lProba, lTests, lEpsNFA, bSubLines, valid);
+    std::swap(edges, valid);
+}
+
+/// Find_root of Union/Find algorithm.
+int root(std::vector<int>& zpar, int i) {
+    if(zpar[i]==i)
+        return i;
+    return (zpar[i] = root(zpar, zpar[i]));
 }
 
 /// Lowest common ancestor on max-tree.
@@ -230,7 +233,7 @@ void ED::validateEdge(const std::vector<Point>& e,
         if(i==root || std::round(G(e[par[i]]))!=v)
             tree[i] = new Interval(i,v);
     }
-    for(size_t i=0; i<n; i++)  // Build tree edges and fill info
+    for(size_t i=0; i<n; i++)  // Build tree edges
         if(i!=root && tree[i])
             tree[par[i]]->addChild(tree[i]);
     const int ext=tree[root]->min; // Index of point outside any loop
@@ -245,11 +248,11 @@ void ED::validateEdge(const std::vector<Point>& e,
                 i1->max=0;
         }
     }
-    for(size_t i=0; i<n; i++) // Fill info
+    for(size_t i=0; i<n; i++) // Fill bounds (without sub-intervals)
         if(! tree[i])
             tree[par[i]]->add(i, ext);
-    tree[root]->fillBounds(ext);
-    tree[root]->min=0; tree[root]->max=(int)n-1; // Fix bounds
+    tree[root]->fillBounds(ext); // Integrate sub-intervals in computing bounds
+    tree[root]->min=0; tree[root]->max=(int)n-1; // Fix root bounds
     for(size_t i=0; i<n; i++) // Compute log NFA
         if(tree[i]) {
             int len = (tree[i]->loop? (int)n-tree[i]->max+tree[i]->min+1:
