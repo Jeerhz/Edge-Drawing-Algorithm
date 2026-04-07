@@ -13,12 +13,13 @@
 #include <algorithm>
 #include <numeric>
 #include <cmath>
+#include <cassert>
 
 /// \file
 // The above command is meant to include comment on #define in Doxygen.
 /// Uncomment to validate portions of lines. Otherwise, any valid portion
 /// validates the whole line.
-//#define VALID_SUBLINE
+#define VALID_SUBLINE
 
 const ED::Orientation HORIZONTAL=true;
 const ED::Orientation VERTICAL=false;
@@ -231,6 +232,15 @@ void ED::extractEdgesFromTree(Chain* root) {
     }
 }
 
+// --- A contrario validation ---
+
+/// Test if path is closed, that is, first and last points are 8-neighbors.
+bool closed(const std::vector<Point>& e) {
+    short dx = (short)e.front().x - (short)e.back().x,
+          dy = (short)e.front().y - (short)e.back().y;
+    return dx*dy*dx*dy==1;
+}
+
 /// Functor for sorting based on gradient along edge.
 struct CompareGradEdge {
     const Image<float>& G;
@@ -285,8 +295,9 @@ struct Interval {
     Interval* parent;
     std::vector<Interval*> child;
     int min, max;
-    float v;
-    Interval(int i, float v0): parent(0), min(i), max(i), v(v0) {}
+    float v; ///< First min gradient, then log10(NFA)
+    bool loop; ///< For closed ege
+    Interval(int i, float v0): parent(0), min(i), max(i), v(v0), loop(false) {}
     ~Interval() {
         std::vector<Interval*>::iterator it, end=child.end();
         for(it=child.begin(); it!=end; ++it)
@@ -296,11 +307,19 @@ struct Interval {
         c->parent = this;
         child.push_back(c);
     }
-    void add(int i) {
-        if(i<min)
+    void add(int i, int ext) {
+        if(i<min && (!loop || ext<i))
             min = i;
-        if(i>max)
+        if(i>max && (!loop || i<ext))
             max = i;
+    }
+    void fillBounds(int ext) {
+        std::vector<Interval*>::iterator it, end=child.end();
+        for(it=child.begin(); it!=end; ++it) {
+            (*it)->fillBounds(ext);
+            add((*it)->min, ext);
+            add((*it)->max, ext);
+        }
     }
     Interval* findMinValue() {
         Interval* min = this;
@@ -312,17 +331,20 @@ struct Interval {
         }
         return min;
     }
-    void fillBounds() {
-        std::vector<Interval*>::iterator it, end=child.end();
-        for(it=child.begin(); it!=end; ++it) {
-            (*it)->fillBounds();
-            if(min > (*it)->min)
-                min = (*it)->min;
-            if(max < (*it)->max)
-                max = (*it)->max;
-        }
-    }
 };
+
+/// Lowest common ancestor on max-tree.
+/// Rely on increasing value while going down-tree.
+Interval* lca(Interval* i1, Interval* i2) {
+    while(i1 != i2) {
+        assert(i1 && i2);
+        if(i2->v <= i1->v)
+            i1 = i1->parent;
+        else
+            i2 = i2->parent;
+    }
+    return i1;
+}
 
 /// Step 3 of algorithm in ED::validateEdge.
 void extract_valid_segments(const std::vector<Point>& e,
@@ -332,7 +354,12 @@ void extract_valid_segments(const std::vector<Point>& e,
     if(m->v > lEpsNFA)
         return;
 #ifdef VALID_SUBLINE
-    std::vector<Point> v(e.begin()+m->min, e.begin()+m->max+1);
+    std::vector<Point> v;
+    if(m->loop) {
+        v.insert(v.end(), e.begin()+m->min, e.end());
+        v.insert(v.end(), e.begin(), e.begin()+m->max+1);
+    } else
+        v.insert(v.end(), e.begin()+m->min, e.begin()+m->max+1);
     valid.push_back(v);
     for(; m->parent; m = m->parent) {
         std::vector<Interval*>::iterator it, end=m->parent->child.end();
@@ -370,6 +397,7 @@ void ED::validateEdge(const std::vector<Point>& e,
         return;
     }
 #endif
+    const bool circular = closed(e);
     std::vector<int> idx(n);
     std::iota(idx.begin(), idx.end(), 0);
     std::sort(idx.begin(), idx.end(), CompareGradEdge(G,e));
@@ -379,12 +407,18 @@ void ED::validateEdge(const std::vector<Point>& e,
     for(int i=(int)n-1; i>=0; i--) {
         int j=idx[i];
         par[j] = zpar[j] = j;
-        if(j>0 && zpar[j-1]>=0) {
-            int k = root(zpar,j-1);
+        int l = j-1;
+        if(circular && l<0)
+            l = (int)n-1;
+        if(l>=0 && zpar[l]>=0) {
+            int k = root(zpar,l);
             par[k] = zpar[k] = j;
         }
-        if(j+1<(int)n && zpar[j+1]>=0) {
-            int k = root(zpar,j+1);
+        l = j+1;
+        if(circular && l>=(int)n)
+            l = 0;
+        if(l<(int)n && zpar[l]>=0) {
+            int k = root(zpar,l);
             par[k] = zpar[k] = j;
         }
     }
@@ -394,7 +428,7 @@ void ED::validateEdge(const std::vector<Point>& e,
         if(std::round(G(e[par[k]])) == std::round(G(e[k])))
             par[j] = par[k];
     }
-    size_t root = idx[0];
+    const size_t root = idx[0];
 
     std::vector<Interval*> tree(n, 0);
     for(size_t i=0; i<n; i++) { // Build tree nodes
@@ -402,19 +436,32 @@ void ED::validateEdge(const std::vector<Point>& e,
         if(i==root || std::round(G(e[par[i]]))!=v)
             tree[i] = new Interval(i,v);
     }
-    for(size_t i=0; i<n; i++)
-        if(i!=root) { // Build tree edges and fill info
-            if(tree[i])
-                tree[par[i]]->addChild(tree[i]);
+    for(size_t i=0; i<n; i++)  // Build tree edges and fill info
+        if(i!=root && tree[i])
+            tree[par[i]]->addChild(tree[i]);
+    const int ext=tree[root]->min; // Index of point outside any loop
+    if(circular) { // Tag circular intervals
+        Interval* i1 = tree[0]? tree[0]: tree[par[0]];
+        Interval* i2 = tree[n-1]? tree[n-1]: tree[par[n-1]];
+        for(i1 = lca(i1,i2); i1->parent; i1=i1->parent) {
+            i1->loop = true;
+            if(i1->min < ext)
+                i1->min=(int)n-1;
             else
-                tree[par[i]]->add(i);
+                i1->max=0;
         }
-    tree[root]->fillBounds();
+    }
+    for(size_t i=0; i<n; i++) // Fill info
+        if(! tree[i])
+            tree[par[i]]->add(i, ext);
+    tree[root]->fillBounds(ext);
+    tree[root]->min=0; tree[root]->max=(int)n-1; // Fix bounds
     for(size_t i=0; i<n; i++) // Compute log NFA
-        if(tree[i])
-            tree[i]->v = lTests +
-                         (tree[i]->max-tree[i]->min+1) * 0.5f *
-                         lProba[(int)std::round(tree[i]->v)];
+        if(tree[i]) {
+            int len = (tree[i]->loop? (int)n-tree[i]->max+tree[i]->min+1:
+                       tree[i]->max-tree[i]->min+1);
+            tree[i]->v = lTests+len*0.5f*lProba[(int)std::round(tree[i]->v)];
+        }
     extract_valid_segments(e, tree[root], lEpsNFA, valid);
     delete tree[root];
 }
