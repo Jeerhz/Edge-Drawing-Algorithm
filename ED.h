@@ -23,6 +23,10 @@ public:
 
     typedef bool Orientation;
     typedef char State;
+    static const Orientation HORIZONTAL=true;
+    static const Orientation VERTICAL=false;
+    static const State ANCHOR=1;
+    static const State EDGE=2;
 protected:
     Image<float> G;
     Image<Orientation> O;
