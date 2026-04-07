@@ -34,7 +34,8 @@ Usage: ./build/edgeDrawing [options] in.png out.png
 -l, --length-min=ARG Min length of edge segment (10)
 -s, --sigma=ARG Sigma of Gaussian blur (1)
 -e, --epsNFA=ARG log10(NFA) for validation, normally 0 or negative (0)
-No NFA validation if option -e is not used
+-S, --sublines Validate portions of lines
+NFA validation only with -e and/or -S
 ```
 
 Typical settings for a contrario validation of edges:

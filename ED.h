@@ -17,7 +17,7 @@ class ED {
 public:
     ED(const Image<float>& G, const Image<float>& Theta,
        float gradMin=6, float anchorGap=2, int minPathLen=10);
-    void validateNFA(float lEpsNFA=0);
+    void validateNFA(float lEpsNFA=0, bool bSublines=false);
 
     std::vector<std::vector<Point>> edges;
 
@@ -42,7 +42,7 @@ private:
     void buildRootEdge(Chain* root);
     void validateEdge(const std::vector<Point>& e,
                       const std::vector<float>& lProba,
-                      float lTests, float lEpsNFA,
+                      float lTests, float lEpsNFA, bool bSubLines,
                       std::vector<std::vector<Point>>& valid) const;
 };
 

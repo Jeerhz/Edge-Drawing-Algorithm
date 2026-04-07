@@ -57,7 +57,8 @@ int main(int argc, char **argv) {
     int lengthMin=10;
     float sigma=1.0f;
     float lEpsNFA=0;
-
+    bool bSubLines=false;
+    
     CmdLine cmd;
     cmd.add( make_option('g', gradMin, "grad-min")
              .doc("Min gradient") );
@@ -69,6 +70,8 @@ int main(int argc, char **argv) {
              .doc("Sigma of Gaussian blur") );
     cmd.add( make_option('e', lEpsNFA, "epsNFA")
              .doc("log10(NFA) for validation, normally 0 or negative") );
+    cmd.add( make_option('S', bSubLines, "sublines")
+             .doc("Validate portions of lines") );
     try {
         cmd.process(argc, argv);
     } catch(const std::string& s) {
@@ -77,7 +80,7 @@ int main(int argc, char **argv) {
     }
     if(argc != 3) {
         std::cerr << "Usage: "<<argv[0] << " [options] in.png out.png\n" << cmd
-                  << "No NFA validation if option -e is not used" << std::endl; 
+                  << "NFA validation only with -e and/or -S" << std::endl; 
         return 1;
     }
     if(gradMin < 1.0) {
@@ -108,8 +111,8 @@ int main(int argc, char **argv) {
     grad(channels, c, G, Theta);
     
     ED ed(G, Theta, gradMin, anchorGap, lengthMin);
-    if(cmd.used('e'))
-        ed.validateNFA(lEpsNFA);
+    if(cmd.used('e') || cmd.used('S'))
+        ed.validateNFA(lEpsNFA, bSubLines);
 
     unsigned char* out = new unsigned char[3*w*h];
     std::fill_n(out, 3*w*h, 0);
