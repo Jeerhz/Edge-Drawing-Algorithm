@@ -16,8 +16,9 @@
 #include <cstdlib>
 #include <cmath>
 
-/// Compute gradient of image and store in polar.
-void grad(Image<float> I[3], size_t c, Image<float>& G, Image<float>& Theta) {
+/// Compute gradient of image and store in polar. Gradient magnitude is
+/// set to closest integer.
+void grad(Image<float> I[3], size_t c, Image<int>& G, Image<float>& Theta) {
     G.reset(I[0].w, I[0].h); G.fill(0);
     Theta.reset(I[0].w, I[0].h); Theta.fill(0);
     if(c==1) // 2x2 scheme, like LSD
@@ -26,7 +27,7 @@ void grad(Image<float> I[3], size_t c, Image<float>& G, Image<float>& Theta) {
                 float c1 = I[0](x+1,y+1) - I[0](x,y);
                 float c2 = I[0](x+1,y) - I[0](x,y+1);
                 float gx = c1+c2, gy = c1-c2;
-                G(x,y) = 0.5f*std::hypot(gx, gy);
+                G(x,y) = (int)std::round(0.5f*std::hypot(gx, gy));
                 if(G(x,y)>0)
                     Theta(x,y) = std::atan2(gy, gx);
             }
@@ -45,15 +46,16 @@ void grad(Image<float> I[3], size_t c, Image<float>& G, Image<float>& Theta) {
                 float gxy = dx[0]*dy[0] + dx[1]*dy[1] + dx[2]*dy[2]; // u.v
                 float theta = 0.5f * std::atan2(2*gxy, gxx-gyy);
                 Theta(x,y) = theta;
-                G(x,y) = std::sqrt(0.5f*(gxx+gyy +
-                                         (gxx-gyy)*cos(2*theta) +
-                                         2*gxy*sin(2*theta))) * norm;
+                float v = std::sqrt((gxx+gyy +
+                                     (gxx-gyy)*cos(2*theta) +
+                                     2*gxy*sin(2*theta))*0.5f) * norm;
+                G(x,y) = (int)std::round(v);
             }
     }
 }
 
 int main(int argc, char **argv) {
-    double gradMin=6, anchorGap=2;
+    int gradMin=6, anchorGap=2;
     int lengthMin=10;
     float sigma=1.0f;
     float lEpsNFA=0;
@@ -83,7 +85,7 @@ int main(int argc, char **argv) {
                   << "NFA validation only with -e and/or -S" << std::endl; 
         return 1;
     }
-    if(gradMin < 1.0) {
+    if(gradMin < 1) {
         std::cerr << "The grad-min parameter must be 1 or more" <<std::endl;
         return 1;
     }
@@ -107,7 +109,7 @@ int main(int argc, char **argv) {
     }
     free(im);
 
-    Image<float> G, Theta;
+    Image<int> G; Image<float> Theta;
     grad(channels, c, G, Theta);
     
     ED ed(G, Theta, gradMin, anchorGap, lengthMin);

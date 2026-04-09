@@ -45,8 +45,8 @@ void erase_chain(const Chain* c, Image<ED::State>& S) {
 }
 
 /// Constructor. Does all the computation, output in field \c edges.
-ED::ED(const Image<float>& grad, const Image<float>& Theta,
-       float gradMin, float anchorThresh, int minPathLen)
+ED::ED(const Image<int>& grad, const Image<float>& Theta,
+       int gradMin, int anchorThresh, int minPathLen)
 : G(grad), O(G.w,G.h), S(G.w,G.h), minGrad(gradMin), minLen(minPathLen) {
     for(int y=0; y<G.h; y++)
         G(0,y) = G(G.w-1,y) = 0;
@@ -63,11 +63,11 @@ ED::ED(const Image<float>& grad, const Image<float>& Theta,
 
 /// Compute anchor pixels: local max of gradient (with minimal gap and value).
 /// Pixels satisfying the condition get the label in state image \c S.
-void ED::computeAnchors(float anchorThresh) {
+void ED::computeAnchors(int anchorThresh) {
     S.fill(0);
     for(Point p={1,1}; p.y+1<S.h; p.y++)
         for(p.x=1; p.x+1<S.w; p.x++) {
-            float g = G(p);
+            int g = G(p);
             if(g < minGrad)
                 continue;
             Point q1 = neighbor(p, dir(!O(p),0));
@@ -79,12 +79,12 @@ void ED::computeAnchors(float anchorThresh) {
 
 /// Build histogram of G values for anchor points, return number of beans.
 std::vector<int> ED::cumulHistoGradAnchors() const {
-    int n = (int)std::round(*std::max_element(G.begin(), G.end()))+1;
+    int n = *std::max_element(G.begin(), G.end())+1;
     std::vector<int> H(n, 0);
     for(Point p={1,1}; p.y+1<S.h; p.y++)
         for(p.x=1; p.x+1<S.w; p.x++)
             if(S(p) == ANCHOR)
-                ++H[(int)std::round(G(p))];
+                ++H[G(p)];
     std::partial_sum(H.begin(), H.end(), H.begin());
     return H;
 }
@@ -102,7 +102,7 @@ std::vector<Point> ED::sortedAnchors() const {
     for(Point p={1,1}; p.y+1<S.h; p.y++)
         for(p.x=1; p.x+1<S.w; p.x++)
             if(S(p) == ANCHOR) {
-                int i = --H[(int)std::round(G(p))];
+                int i = --H[G(p)];
                 anchors[i] = p;
             }
     return anchors;
@@ -139,13 +139,13 @@ bool ED::nextPixelChain(StackNode& node) {
         q[i] = neighbor(q[0], dir(!orient(node.dir),i-1));
     }
 
-    float bestGrad = -1;
+    int bestGrad = -1;
     for (int i = 0; i < 3; i++) {
         if(S(q[i]) != 0) {
             node.pos = q[i];
             return S(node.pos)!=EDGE;
         }
-        float g = G(q[i]);
+        int g = G(q[i]);
         if (g > bestGrad) {
             bestGrad = g;
             node.pos = q[i];

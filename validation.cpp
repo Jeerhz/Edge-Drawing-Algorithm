@@ -84,14 +84,11 @@ Interval* Interval::findMinValue() {
 
 /// Functor for sorting based on gradient along edge.
 struct CompareGradEdge {
-    const Image<float>& G;
+    const Image<int>& G;
     const std::vector<Point>& E;
-    CompareGradEdge(const Image<float>& g, const std::vector<Point>& e)
+    CompareGradEdge(const Image<int>& g, const std::vector<Point>& e)
     : G(g), E(e) {}
-    bool operator()(int i, int j) const {
-        float vi=G(E[i]), vj=G(E[j]);
-        return (vi<vj);
-    }
+    bool operator()(int i, int j) const { return (G(E[i])<G(E[j])); }
 };
 
 /// A contrario validation. \a lEpsNFA is the log10 of detection threshold.
@@ -192,7 +189,7 @@ void ED::validateEdge(const std::vector<Point>& e,
     std::iota(idx.begin(), idx.end(), 0);
     if(! bSubLines) { // shortcut: if whole line is valid, no need for max-tree
         int min=*std::min_element(idx.begin(), idx.end(), CompareGradEdge(G,e));
-        if(lTests+n*0.5f*lProba[(int)std::round(G(e[min]))] <= lEpsNFA) {
+        if(lTests+n*0.5f*lProba[G(e[min])] <= lEpsNFA) {
             valid.push_back(e);
             return;
         }
@@ -222,15 +219,15 @@ void ED::validateEdge(const std::vector<Point>& e,
     // Canonize
     for(size_t i=1; i<n; i++) {
         int j=idx[i], k=par[j];
-        if(std::round(G(e[par[k]])) == std::round(G(e[k])))
+        if(G(e[par[k]]) == G(e[k]))
             par[j] = par[k];
     }
     const size_t root = idx[0];
 
     std::vector<Interval*> tree(n, 0);
     for(size_t i=0; i<n; i++) { // Build tree nodes
-        float v = std::round(G(e[i]));
-        if(i==root || std::round(G(e[par[i]]))!=v)
+        int v = G(e[i]);
+        if(i==root || G(e[par[i]])!=v)
             tree[i] = new Interval(i,v);
     }
     for(size_t i=0; i<n; i++)  // Build tree edges
@@ -257,7 +254,7 @@ void ED::validateEdge(const std::vector<Point>& e,
         if(tree[i]) {
             int len = (tree[i]->loop? (int)n-tree[i]->max+tree[i]->min+1:
                        tree[i]->max-tree[i]->min+1);
-            tree[i]->v = lTests+len*0.5f*lProba[(int)std::round(tree[i]->v)];
+            tree[i]->v = lTests+len*0.5f*lProba[tree[i]->v];
         }
     extract_valid_segments(e, tree[root], lEpsNFA, bSubLines, valid);
     delete tree[root];

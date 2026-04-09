@@ -15,8 +15,8 @@
 
 class ED {
 public:
-    ED(const Image<float>& G, const Image<float>& Theta,
-       float gradMin=6, float anchorGap=2, int minPathLen=10);
+    ED(const Image<int>& G, const Image<float>& Theta,
+       int gradMin=6, int anchorGap=2, int minPathLen=10);
     void validateNFA(float lEpsNFA=0, bool bSublines=false);
 
     std::vector<std::vector<Point>> edges;
@@ -28,14 +28,14 @@ public:
     static const State ANCHOR=1;
     static const State EDGE=2;
 protected:
-    Image<float> G;
+    Image<int> G;
     Image<Orientation> O;
     Image<State> S;
-    float minGrad;
+    int minGrad;
     int minLen;
 
 private:
-    void computeAnchors(float anchorThresh);
+    void computeAnchors(int anchorThresh);
     std::vector<int> cumulHistoGradAnchors() const;
     std::vector<Point> sortedAnchors() const;
     void joinAnchors();
