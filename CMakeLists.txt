@@ -1,17 +1,16 @@
-cmake_minimum_required(VERSION 3.11)
+cmake_minimum_required(VERSION 3.13)
 project(EDStudy)
 
 find_package(PNG)
 if(NOT PNG_FOUND)
   find_package(ZLIB) # zlib is needed by libPNG
   if(NOT ZLIB_FOUND)
-        set(ZLIB_BUILD_EXAMPLES OFF)
-        add_subdirectory(third_party/zlib-1.3.1)
+        set(ZLIB_BUILD_TESTING OFF)
+        set(ZLIB_BUILD_STATIC OFF)
+        set(ZLIB_INSTALL OFF)
+        add_subdirectory(third_party/zlib-1.3.2)
         set(ZLIB_FOUND TRUE)
-        set(ZLIB_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/third_party/zlib-1.3.1")
-        set_target_properties(${ZLIB_LIBRARIES} PROPERTIES
-            INTERFACE_INCLUDE_DIRECTORIES "${ZLIB_INCLUDE_DIRS}")
-        add_library(ZLIB::ZLIB ALIAS "${ZLIB_LIBRARIES}")
+        set(ZLIB_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/third_party/zlib-1.3.2")
   endif()
 
   set(PNG_SHARED OFF)
