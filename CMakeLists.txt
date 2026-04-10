@@ -13,11 +13,11 @@ if(NOT PNG_FOUND)
         set(ZLIB_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/third_party/zlib-1.3.2")
   endif()
 
-  set(PNG_SHARED OFF)
+  set(PNG_STATIC OFF)
   set(PNG_TESTS OFF)
   set(PNG_TOOLS OFF)
   set(SKIP_INSTALL_ALL 1)
-  add_subdirectory(third_party/libpng-1.6.53)
+  add_subdirectory(third_party/libpng-1.6.56)
   set_target_properties(${PNG_LIBRARIES} PROPERTIES
             INTERFACE_INCLUDE_DIRECTORIES "${PNG_INCLUDE_DIRS}")
   add_library(PNG::PNG ALIAS "${PNG_LIBRARIES}")
