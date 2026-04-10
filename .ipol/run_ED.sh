@@ -20,4 +20,4 @@ if [ "$5" = "true" ]; then
    fi
 fi
 
-echo $bin/build/edgeDrawing $valid -g $grad -a $gap -l $length -s $sigma $input_0 edges.png
+$bin/build/edgeDrawing $valid -g $grad -a $gap -l $length -s $sigma $input_0 edges.png
